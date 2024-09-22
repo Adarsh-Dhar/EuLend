@@ -17,8 +17,5 @@ pub struct State {
 //     pub owner: Addr,
 // }
 
-
-
 pub const STATE: Item<State> = Item::new("state");
 // pub const ACCOUNT: Item<Account> = Item::new("account");
-

@@ -65,7 +65,6 @@ pub mod execute {
     //         Ok(account)
     //     })?;
     //     Ok(Response::new().add_attribute("action", "withdraw"))
-    
 
     pub fn increment(deps: DepsMut) -> Result<Response, ContractError> {
         STATE.update(deps.storage, |mut state| -> Result<_, ContractError> {
@@ -87,7 +86,6 @@ pub mod execute {
         Ok(Response::new().add_attribute("action", "reset"))
     }
 }
-
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
