@@ -7,8 +7,8 @@ pub struct InstantiateMsg {
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    Deposit { amount: i32 },
-    Withdraw { amount: i32 },
+    // Deposit { amount: i32 },
+    // Withdraw { amount: i32 },
     Increment {},
     Reset { count: i32 },
 }

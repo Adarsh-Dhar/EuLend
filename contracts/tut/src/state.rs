@@ -10,15 +10,15 @@ pub struct State {
     pub owner: Addr,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
-pub struct Account {
-    pub balance: i32,
-    pub debt : i32,
-    pub owner: Addr,
-}
+// #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
+// pub struct Account {
+//     pub balance: i32,
+//     pub debt : i32,
+//     pub owner: Addr,
+// }
 
 
 
 pub const STATE: Item<State> = Item::new("state");
-pub const ACCOUNT: Item<Account> = Item::new("account");
+// pub const ACCOUNT: Item<Account> = Item::new("account");
 
