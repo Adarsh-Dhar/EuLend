@@ -6,21 +6,56 @@
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "InstantiateMsg",
     "type": "object",
-    "required": [
-      "count"
-    ],
-    "properties": {
-      "count": {
-        "type": "integer",
-        "format": "int32"
-      }
-    },
     "additionalProperties": false
   },
   "execute": {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "ExecuteMsg",
     "oneOf": [
+      {
+        "type": "object",
+        "required": [
+          "deposit"
+        ],
+        "properties": {
+          "deposit": {
+            "type": "object",
+            "required": [
+              "amount"
+            ],
+            "properties": {
+              "amount": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "withdraw"
+        ],
+        "properties": {
+          "withdraw": {
+            "type": "object",
+            "required": [
+              "amount"
+            ],
+            "properties": {
+              "amount": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
       {
         "type": "object",
         "required": [
@@ -74,12 +109,40 @@
           }
         },
         "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "get_balance"
+        ],
+        "properties": {
+          "get_balance": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
       }
     ]
   },
   "migrate": null,
   "sudo": null,
   "responses": {
+    "get_balance": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "GetBalanceResponse",
+      "type": "object",
+      "required": [
+        "balance"
+      ],
+      "properties": {
+        "balance": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "additionalProperties": false
+    },
     "get_count": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "GetCountResponse",
