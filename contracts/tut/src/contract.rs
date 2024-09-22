@@ -5,7 +5,7 @@ use cw2::set_contract_version;
 
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, GetCountResponse, InstantiateMsg, QueryMsg};
-use crate::state::{State, STATE};
+use crate::state::{State, STATE, Account, ACCOUNT};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:tut";
@@ -39,6 +39,8 @@ pub fn execute(
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
+        ExecuteMsg::Deposit { amount } => execute::deposit(deps, info, amount),
+        ExecuteMsg::Withdraw { amount } => execute::withdraw(deps, info, amount),
         ExecuteMsg::Increment {} => execute::increment(deps),
         ExecuteMsg::Reset { count } => execute::reset(deps, info, count),
     }
@@ -46,6 +48,24 @@ pub fn execute(
 
 pub mod execute {
     use super::*;
+
+    pub fn deposit(deps: DepsMut, info: MessageInfo, amount: i32) -> Result<Response, ContractError> {
+        let amtToMint = amount;
+        ACCOUNT.update(deps.storage, |mut account| -> Result<_, ContractError> {
+            account.balance += amtToMint;
+            Ok(account)
+        })?;
+        Ok(Response::new().add_attribute("action", "deposit"))
+    }
+
+    pub fn withdraw(deps: DepsMut, info: MessageInfo, amount: i32) -> Result<Response, ContractError> {
+        let amtToBurn = amount;
+        ACCOUNT.update(deps.storage, |mut account| -> Result<_, ContractError> {
+            account.balance -= amtToBurn;
+            Ok(account)
+        })?;
+        Ok(Response::new().add_attribute("action", "withdraw"))
+    }
 
     pub fn increment(deps: DepsMut) -> Result<Response, ContractError> {
         STATE.update(deps.storage, |mut state| -> Result<_, ContractError> {
