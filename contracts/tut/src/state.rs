@@ -13,7 +13,7 @@ pub struct State {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema)]
 pub struct Account {
     pub balance: i32,
-    pub debt : i32,
+    pub debt: i32,
     pub owner: Addr,
 }
 

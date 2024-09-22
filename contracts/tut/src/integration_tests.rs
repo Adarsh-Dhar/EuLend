@@ -38,7 +38,7 @@ mod tests {
         let mut app = mock_app();
         let cw_template_id = app.store_code(contract_template());
 
-        let msg = InstantiateMsg { };
+        let msg = InstantiateMsg {};
         let cw_template_contract_addr = app
             .instantiate_contract(
                 cw_template_id,
@@ -63,7 +63,7 @@ mod tests {
         fn balance() {
             let (mut app, cw_template_contract) = proper_instantiate();
 
-            let msg = ExecuteMsg::Deposit {amount : 1};
+            let msg = ExecuteMsg::Deposit { amount: 1 };
             let cosmos_msg = cw_template_contract.call(msg).unwrap();
             app.execute(Addr::unchecked(USER), cosmos_msg).unwrap();
         }
