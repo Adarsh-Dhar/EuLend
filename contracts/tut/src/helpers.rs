@@ -6,7 +6,7 @@ use cosmwasm_std::{
     WasmQuery,
 };
 
-use crate::msg::{ExecuteMsg, GetCountResponse, QueryMsg};
+use crate::msg::{ExecuteMsg, GetBalanceResponse, QueryMsg};
 
 /// CwTemplateContract is a wrapper around Addr that provides a lot of helpers
 /// for working with this.
@@ -29,19 +29,19 @@ impl CwTemplateContract {
     }
 
     /// Get Count
-    pub fn count<Q, T, CQ>(&self, querier: &Q) -> StdResult<GetCountResponse>
+    pub fn count<Q, T, CQ>(&self, querier: &Q) -> StdResult<GetBalanceResponse>
     where
         Q: Querier,
         T: Into<String>,
         CQ: CustomQuery,
     {
-        let msg = QueryMsg::GetCount {};
+        let msg = QueryMsg::GetBalance {};
         let query = WasmQuery::Smart {
             contract_addr: self.addr().into(),
             msg: to_json_binary(&msg)?,
         }
         .into();
-        let res: GetCountResponse = QuerierWrapper::<CQ>::new(querier).query(&query)?;
+        let res: GetBalanceResponse = QuerierWrapper::<CQ>::new(querier).query(&query)?;
         Ok(res)
     }
 }
