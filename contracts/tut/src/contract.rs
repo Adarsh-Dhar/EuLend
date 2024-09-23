@@ -3,8 +3,8 @@ use cosmwasm_std::entry_point;
 use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
 use cw2::set_contract_version;
 
-use crate::error::{ContractError};
-use crate::msg::{ExecuteMsg,  InstantiateMsg, QueryMsg, GetBalanceResponse};
+use crate::error::ContractError;
+use crate::msg::{ExecuteMsg, GetBalanceResponse, InstantiateMsg, QueryMsg};
 use crate::state::{Account, ACCOUNT};
 
 // version info for migration info
@@ -31,8 +31,6 @@ pub fn instantiate(
         .add_attribute("owner", info.sender)
         .add_attribute("balance", 0.to_string())
         .add_attribute("debt", 0.to_string()))
-
-
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -53,24 +51,31 @@ pub fn execute(
 pub mod execute {
     use super::*;
 
-    pub fn deposit(deps: DepsMut, info: MessageInfo, amount: i32) -> Result<Response, ContractError> {
+    pub fn deposit(
+        deps: DepsMut,
+        info: MessageInfo,
+        amount: i32,
+    ) -> Result<Response, ContractError> {
         let amt_to_mint = amount;
-       
+
         ACCOUNT.update(deps.storage, |mut account| -> Result<_, ContractError> {
-            if(info.sender != account.owner) {
+            if (info.sender != account.owner) {
                 return Err(ContractError::Unauthorized {});
             }
-    
+
             account.balance += amt_to_mint;
             Ok(account)
         })?;
         Ok(Response::new().add_attribute("action", "deposit"))
     }
 
-    pub fn withdraw(deps: DepsMut, info: MessageInfo, amount: i32) -> Result<Response, ContractError> {
+    pub fn withdraw(
+        deps: DepsMut,
+        info: MessageInfo,
+        amount: i32,
+    ) -> Result<Response, ContractError> {
         let amt_to_burn = amount;
-         
-       
+
         ACCOUNT.update(deps.storage, |mut account| -> Result<_, ContractError> {
             if amount > account.balance {
                 return Err(ContractError::InsufficientFunds {});
@@ -119,7 +124,9 @@ pub mod query {
 
     pub fn balance(deps: Deps) -> StdResult<GetBalanceResponse> {
         let account = ACCOUNT.load(deps.storage)?;
-        Ok(GetBalanceResponse { balance: account.balance })
+        Ok(GetBalanceResponse {
+            balance: account.balance,
+        })
     }
 
     // pub fn count(deps: Deps) -> StdResult<GetCountResponse> {
@@ -187,7 +194,7 @@ mod tests {
     //         _ => panic!("Must return unauthorized error"),
     //     }
 
-        // only the original creator can reset the counter
+    // only the original creator can reset the counter
     //     let auth_info = mock_info("creator", &coins(2, "token"));
     //     let msg = ExecuteMsg::Reset { count: 5 };
     //     let _res = execute(deps.as_mut(), mock_env(), auth_info, msg).unwrap();
@@ -208,7 +215,7 @@ mod tests {
 
         // beneficiary can release it
         let unauth_info = mock_info("anyone", &coins(2, "token"));
-        let msg = ExecuteMsg::Deposit { amount : 5 };
+        let msg = ExecuteMsg::Deposit { amount: 5 };
         let res = execute(deps.as_mut(), mock_env(), unauth_info, msg);
         match res {
             Err(ContractError::Unauthorized {}) => {}
@@ -236,7 +243,7 @@ mod tests {
 
         // beneficiary can release it
         let unauth_info = mock_info("anyone", &coins(2, "token"));
-        let msg = ExecuteMsg::Withdraw { amount : 2 };
+        let msg = ExecuteMsg::Withdraw { amount: 2 };
         let res = execute(deps.as_mut(), mock_env(), unauth_info, msg);
         match res {
             Err(ContractError::Unauthorized {}) => {}
