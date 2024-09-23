@@ -16,7 +16,7 @@ pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    msg: InstantiateMsg,
+    _msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     let account = Account {
         debt: 0,
@@ -59,7 +59,7 @@ pub mod execute {
         let amt_to_mint = amount;
 
         ACCOUNT.update(deps.storage, |mut account| -> Result<_, ContractError> {
-            if (info.sender != account.owner) {
+            if info.sender != account.owner {
                 return Err(ContractError::Unauthorized {});
             }
 
@@ -139,7 +139,7 @@ pub mod query {
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, from_binary};
+    use cosmwasm_std::{coins, from_json_binary};
 
     #[test]
     fn proper_initialization() {
@@ -154,7 +154,7 @@ mod tests {
 
         // it worked, let's query the state
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetBalance {}).unwrap();
-        let value: GetBalanceResponse = from_binary(&res).unwrap();
+        let value: GetBalanceResponse = from_json_binary(&res).unwrap();
         assert_eq!(5, value.balance);
     }
 
@@ -173,7 +173,7 @@ mod tests {
 
     //     // should increase counter by 1
     //     let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCount {}).unwrap();
-    //     let value: GetCountResponse = from_binary(&res).unwrap();
+    //     let value: GetCountResponse = from_json_binary(&res).unwrap();
     //     assert_eq!(18, value.count);
     // }
 
@@ -201,7 +201,7 @@ mod tests {
 
     //     // should now be 5
     //     let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCount {}).unwrap();
-    //     let value: GetCountResponse = from_binary(&res).unwrap();
+    //     let value: GetCountResponse = from_json_binary(&res).unwrap();
     //     assert_eq!(5, value.count);
     // }
 
@@ -229,7 +229,7 @@ mod tests {
 
         // should now be 5
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetBalance {}).unwrap();
-        let value: GetBalanceResponse = from_binary(&res).unwrap();
+        let value: GetBalanceResponse = from_json_binary(&res).unwrap();
         assert_eq!(10, value.balance);
     }
 
@@ -257,7 +257,7 @@ mod tests {
 
         // should now be 5
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetBalance {}).unwrap();
-        let value: GetBalanceResponse = from_binary(&res).unwrap();
+        let value: GetBalanceResponse = from_json_binary(&res).unwrap();
         assert_eq!(3, value.balance);
     }
 }
