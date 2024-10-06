@@ -5,9 +5,9 @@ import {AxelarExecutable} from "@axelar-network/axelar-gmp-sdk-solidity/contract
 import {IAxelarGateway} from "@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGateway.sol";
 import {IAxelarGasService} from "@axelar-network/axelar-gmp-sdk-solidity/contracts/interfaces/IAxelarGasService.sol";
 import {StringToAddress, AddressToString} from "@axelar-network/axelar-gmp-sdk-solidity/contracts/libs/AddressString.sol";
-import "./chainlink.sol"; // Import the DataConsumerV3 contract
+import "./Lock.sol"; // Import the DataConsumerV3 contract
 
-contract SendReceive is AxelarExecutable {
+contract Axelar is AxelarExecutable {
     using StringToAddress for string;
     using AddressToString for address;
 

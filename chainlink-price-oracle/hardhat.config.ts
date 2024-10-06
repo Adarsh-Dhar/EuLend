@@ -1,27 +1,15 @@
-
-require("@nomiclabs/hardhat-ethers");
-
-const fs = require('fs');
-// const infuraId = fs.readFileSync(".infuraid").toString().trim() || "";
+require("@nomicfoundation/hardhat-toolbox");
 
 module.exports = {
-  defaultNetwork: "hardhat",
+  solidity: "0.8.9",
   networks: {
-    hardhat:{
-      chainId : 11155111
+    ganache: {
+      url: "http://127.0.0.1:8545", // URL of the Ganache network
+      accounts: [
+        // Use the private keys provided by Ganache or copy the mnemonic to generate the keys
+        "0xff30fd287c8ec1d078e888dfca3d3740f019ea646bfb50aefcbf3dd2ff745138",
+        
+      ],
     },
-    sepolia: {
-      url: `https://sepolia.infura.io/v3/dc10a4b3a75349aab5abdf2314cbad35`, // Replace with the actual RPC endpoint for the Sepolia testnet
-      accounts: [ `56a96c57ac92b2d35cd073ce2a81415ab31fbb7181df929069a125384c83b7fd` ]
-    }
   },
-  solidity: {
-    version: "0.8.20",
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 200
-      }
-    }
-  }
 };
