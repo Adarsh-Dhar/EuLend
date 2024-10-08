@@ -1,4 +1,4 @@
-const { ethers } = require("ethers");
+
 
 // ABI for the contract
 const ABI = [

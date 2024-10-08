@@ -7,6 +7,11 @@ pub struct InstantiateMsg {}
 pub enum ExecuteMsg {
     Deposit { amount: i32 },
     Withdraw { amount: i32 },
+    ReceiveMessageEvm {
+        source_chain: String,
+        source_address: String,
+        payload: Binary,
+    },
 }
 
 #[cw_serde]
