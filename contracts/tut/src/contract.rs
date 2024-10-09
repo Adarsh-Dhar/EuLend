@@ -1,9 +1,11 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Coin};
 use cw2::set_contract_version;
+use cw20::{Cw20ExecuteMsg};
+use cw_storage_plus::{ Map};
 
-use crate::error::ContractError;
+use crate::error::{ContractError};
 use crate::msg::{ExecuteMsg, GetBalanceResponse, InstantiateMsg, QueryMsg};
 use crate::state::{Account, ACCOUNT};
 
@@ -22,6 +24,8 @@ pub fn instantiate(
         debt: 0,
         balance: 5,
         owner: info.sender.clone(),
+        deposits: Map::new("new"),
+        borrows: Map::new("new"),
     };
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
     ACCOUNT.save(deps.storage, &account)?;
@@ -36,22 +40,26 @@ pub fn instantiate(
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn execute(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     msg: ExecuteMsg,
 ) -> Result<Response, ContractError> {
     match msg {
-        ExecuteMsg::Deposit { amount } => execute::deposit(deps, info, amount),
-        ExecuteMsg::Withdraw { amount } => execute::withdraw(deps, info, amount),
+        ExecuteMsg::Deposit {token_address, amount } => execute::deposit(deps, env,info, token_address, amount),
+        ExecuteMsg::Withdraw { token_address,amount } => execute::withdraw(deps,env, info,token_address, amount),
+        ExecuteMsg::Borrow { token_address, amount, collateral_token_address, collateral_amount } =>
+        execute::borrow(deps,env, info, token_address, amount, collateral_token_address, collateral_amount),
+        ExecuteMsg::Repay { token_address, amount } => execute::repay(deps,env, info, token_address, amount),
+        ExecuteMsg::Liquidate { borrower, debt_token, collateral_token } => execute::liquidate(deps, env, info, borrower, debt_token, collateral_token),
         // ExecuteMsg::Increment {} => execute::increment(deps),
         // ExecuteMsg::Reset { count } => execute::reset(deps, info, count),
-        ExecuteMsg::ReceiveMessageEvm {
-            source_chain,
-            source_address,
-            payload,
-        } => exec::receive_message_evm(deps, source_chain, source_address, payload)
-    }
-}
+    //     ExecuteMsg::ReceiveMessageEvm {
+    //         source_chain,
+    //         source_address,
+    //         payload,
+    //     } => exec::receive_message_evm(deps, source_chain, source_address, payload)
+    // }
+};
 
 pub mod execute {
     use super::*;
@@ -61,93 +69,96 @@ pub mod execute {
         env: Env,
         info: MessageInfo,
         token_address: String,
-        amount: Uint128,
-    ) -> StdResult<Response> {
-        let mut state = STATE.load(deps.storage)?;
+        amount: i32,
+    ) ->  Result<Response, ContractError> {
+        let mut account = ACCOUNT.load(deps.storage)?;
         let depositor = info.sender;
-        
-        // Update user's deposit
-        let deposit_key = (depositor.clone(), token_address.clone());
-        let current_deposit = state.user_deposits.get(&deposit_key).cloned().unwrap_or_default();
-        state.user_deposits.insert(deposit_key, current_deposit + amount);
-        
-        // Save updated state
-        STATE.save(deps.storage, &state)?;
-
+    
+        // Check if depositor is the owner
+        if account.owner != depositor {
+            return Err(ContractError::Unauthorized{});
+        }
+    
+        // Update user's deposit for the specific token
+        let current_deposit = account.deposits.get(&token_address).cloned().unwrap_or_default();
+        account.deposits.insert(token_address.clone(), current_deposit + amount);
+    
+        // Update the total balance
+        account.balance += amount;
+    
+        // Save updated account
+        ACCOUNT.save(deps.storage, &account)?;
+    
         // If token is native, it's already sent with the transaction
         // If it's a cw20 token, we need to execute a transfer
         let transfer_msg = if token_address == "native" {
             None
         } else {
-            Some(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: token_address,
-                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
-                    owner: depositor.to_string(),
-                    recipient: env.contract.address.to_string(),
-                    amount,
-                })?,
-                funds: vec![],
-            }))
+            Some(ExecuteMsg::Deposit {
+                token_address: token_address.clone(),
+                amount: amount,
+            })
         };
-
+    
         Ok(Response::new()
-            .add_message(transfer_msg.unwrap_or_default())
             .add_attribute("action", "deposit")
             .add_attribute("depositor", depositor)
             .add_attribute("token", token_address)
-            .add_attribute("amount", amount))
+            .add_attribute("amount", amount.to_string()))
     }
+    
 
     pub fn withdraw(
         deps: DepsMut,
         _env: Env,
         info: MessageInfo,
         token_address: String,
-        amount: Uint128,
-    ) -> StdResult<Response> {
-        let mut state = STATE.load(deps.storage)?;
+        amount: i32,
+    ) -> Result<Response, ContractError> {
+        let mut account = ACCOUNT.load(deps.storage)?;
         let withdrawer = info.sender;
-        
-        // Check if user has enough balance
-        let deposit_key = (withdrawer.clone(), token_address.clone());
-        let current_deposit = state.user_deposits.get(&deposit_key).cloned().unwrap_or_default();
-        if current_deposit < amount {
-            return Err(StdError::generic_err("Insufficient balance"));
+    
+        // Check if the withdrawer is the owner
+        if account.owner != withdrawer {
+            return Err(ContractError::Unauthorized{});
         }
-        
-        // Update user's deposit
-        state.user_deposits.insert(deposit_key, current_deposit - amount);
-        
-        // Save updated state
-        STATE.save(deps.storage, &state)?;
-
+    
+        // Check if the user has enough balance for the specific token
+        let current_deposit = account.deposits.get(&token_address).cloned().unwrap_or_default();
+        if current_deposit < amount {
+            return Err(ContractError::InsufficientFunds{});
+        }
+    
+        // Update the user's deposit
+        account.deposits.insert(token_address.clone(), current_deposit - amount);
+        account.balance -= amount;
+    
+        // Save updated account
+        ACCOUNT.save(deps.storage, &account)?;
+    
         // Transfer tokens to user
-        let transfer_msg = if token_address == "native" {
-            CosmosMsg::Bank(BankMsg::Send {
-                to_address: withdrawer.to_string(),
-                amount: vec![Coin {
-                    denom: "uarch".to_string(),
-                    amount,
-                }],
-            })
-        } else {
-            CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: token_address.clone(),
-                msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                    recipient: withdrawer.to_string(),
-                    amount,
-                })?,
-                funds: vec![],
-            })
-        };
-
+        // let transfer_msg = if token_address == "native" {
+        //     ExecuteMsg::Bank {
+        //         to_address: withdrawer.to_string(),
+        //         amount: vec![Coin {
+        //             denom: "uarch".to_string(),
+        //             amount,
+        //         }],
+        //     }
+        // } else {
+        //     ExecuteMsg::Withdraw {
+        //         token_address: token_address.clone(),
+        //         amount: amount,
+        //     }
+        // };
+    
         Ok(Response::new()
-            .add_message(transfer_msg)
             .add_attribute("action", "withdraw")
             .add_attribute("withdrawer", withdrawer)
             .add_attribute("token", token_address)
-            .add_attribute("amount", amount))
+            .add_attribute("amount", amount.to_string()))
     }
+    
 
 
     pub fn borrow(
@@ -155,103 +166,106 @@ pub mod execute {
         _env: Env,
         info: MessageInfo,
         token_address: String,
-        amount: Uint128,
+        amount: i32,
         collateral_token_address: String,
-        collateral_amount: Uint128,
-    ) -> StdResult<Response> {
-        let mut state = STATE.load(deps.storage)?;
+        collateral_amount: i32,
+    ) -> Result<Response, ContractError>  {
+        let mut account = ACCOUNT.load(deps.storage)?;
         let borrower = info.sender;
-        
-        // Check if borrower has enough collateral
-        let collateral_key = (borrower.clone(), collateral_token_address.clone());
-        let current_collateral = state.user_deposits.get(&collateral_key).cloned().unwrap_or_default();
-        if current_collateral < collateral_amount {
-            return Err(StdError::generic_err("Insufficient collateral"));
+    
+        // Check if borrower is the owner
+        if account.owner != borrower {
+            return Err(ContractError::Unauthorized{});
         }
-        
+    
+        // Check if the borrower has enough collateral
+        let current_collateral = account.deposits.get(&collateral_token_address).cloned().unwrap_or_default();
+        if current_collateral < collateral_amount {
+            return Err(ContractError::InsufficientFunds{});
+        }
+    
         // Update borrower's collateral and borrow
-        state.user_deposits.insert(collateral_key, current_collateral - collateral_amount);
-        let borrow_key = (borrower.clone(), token_address.clone());
-        let current_borrow = state.user_borrows.get(&borrow_key).cloned().unwrap_or_default();
-        state.user_borrows.insert(borrow_key, current_borrow + amount);
-        
-        // Save updated state
-        STATE.save(deps.storage, &state)?;
-
+        account.deposits.insert(collateral_token_address.clone(), current_collateral - collateral_amount);
+        let current_borrow = account.borrows.get(&token_address).cloned().unwrap_or_default();
+        account.borrows.insert(token_address.clone(), current_borrow + amount);
+        account.debt += amount;
+    
+        // Save updated account
+        ACCOUNT.save(deps.storage, &account)?;
+    
         // Transfer borrowed tokens to user
         let transfer_msg = if token_address == "native" {
-            CosmosMsg::Bank(BankMsg::Send {
+            ExecuteMsg::Send {
                 to_address: borrower.to_string(),
                 amount: vec![Coin {
                     denom: "uarch".to_string(),
                     amount,
                 }],
-            })
+            }
         } else {
-            CosmosMsg::Wasm(WasmMsg::Execute {
+            ExecuteMsg::Borrow {
                 contract_addr: token_address.clone(),
-                msg: to_binary(&Cw20ExecuteMsg::Transfer {
+                msg: to_json_binary(&Cw20ExecuteMsg::Transfer {
                     recipient: borrower.to_string(),
                     amount,
                 })?,
                 funds: vec![],
-            })
+            }
         };
-
+    
         Ok(Response::new()
-            .add_message(transfer_msg)
             .add_attribute("action", "borrow")
             .add_attribute("borrower", borrower)
             .add_attribute("token", token_address)
-            .add_attribute("amount", amount)
+            .add_attribute("amount", amount.to_string())
             .add_attribute("collateral_token", collateral_token_address)
-            .add_attribute("collateral_amount", collateral_amount))
+            .add_attribute("collateral_amount", collateral_amount.to_string()))
     }
+    
 
     pub fn repay(
         deps: DepsMut,
         env: Env,
         info: MessageInfo,
         token_address: String,
-        amount: Uint128,
-    ) -> StdResult<Response> {
-        let mut state = STATE.load(deps.storage)?;
+        amount: i32,
+    ) -> Result<Response, ContractError> {
+        let mut account = ACCOUNT.load(deps.storage)?;
         let repayer = info.sender;
-        
-        // Update borrower's debt
-        let borrow_key = (repayer.clone(), token_address.clone());
-        let current_borrow = state.user_borrows.get(&borrow_key).cloned().unwrap_or_default();
-        if current_borrow < amount {
-            return Err(StdError::generic_err("Repayment amount exceeds debt"));
+    
+        // Check if repayer is the owner
+        if account.owner != repayer {
+            return Err(ContractError::generic_err("Unauthorized"));
         }
-        state.user_borrows.insert(borrow_key, current_borrow - amount);
-        
-        // Save updated state
-        STATE.save(deps.storage, &state)?;
-
-        // If token is native, it's already sent with the transaction
-        // If it's a cw20 token, we need to execute a transfer
+    
+        // Update borrower's debt
+        let current_borrow = account.borrows.get(&token_address).cloned().unwrap_or_default();
+        if current_borrow < amount {
+            return Err(ContractError::generic_err("Repayment amount exceeds debt"));
+        }
+        account.borrows.insert(token_address.clone(), current_borrow - amount);
+        account.debt -= amount;
+    
+        // Save updated account
+        ACCOUNT.save(deps.storage, &account)?;
+    
+        // Handle token transfer
         let transfer_msg = if token_address == "native" {
             None
         } else {
-            Some(CosmosMsg::Wasm(WasmMsg::Execute {
-                contract_addr: token_address,
-                msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
-                    owner: repayer.to_string(),
-                    recipient: env.contract.address.to_string(),
-                    amount,
-                })?,
-                funds: vec![],
-            }))
+            Some(ExecuteMsg::Repay {
+                token_address: token_address.clone(),   
+                amount : amount,
+            })
         };
-
+    
         Ok(Response::new()
-            .add_message(transfer_msg.unwrap_or_default())
             .add_attribute("action", "repay")
             .add_attribute("repayer", repayer)
             .add_attribute("token", token_address)
-            .add_attribute("amount", amount))
+            .add_attribute("amount", amount.to_string()))
     }
+    
 
     pub fn liquidate(
         deps: DepsMut,
@@ -260,92 +274,77 @@ pub mod execute {
         borrower: String,
         debt_token: String,
         collateral_token: String,
-    ) -> StdResult<Response> {
-        let mut state = STATE.load(deps.storage)?;
+    ) -> Result<Response, ContractError> {
+        let mut account = ACCOUNT.load(deps.storage)?;
         let liquidator = info.sender;
         let borrower_addr = deps.api.addr_validate(&borrower)?;
-        
-        // Check if the position is liquidatable
-        // This would involve checking the current prices, calculating the health factor, etc.
-        // For simplicity, we're not implementing the full liquidation logic here
-        
+    
         // Get the borrowed amount and collateral
-        let borrow_key = (borrower_addr.clone(), debt_token.clone());
-        let borrowed_amount = state.user_borrows.get(&borrow_key).cloned().unwrap_or_default();
-        let collateral_key = (borrower_addr.clone(), collateral_token.clone());
-        let collateral_amount = state.user_deposits.get(&collateral_key).cloned().unwrap_or_default();
-        
-        // Calculate liquidation amount (in a real implementation, this would be more complex)
-        let liquidation_amount = borrowed_amount;
-        let liquidation_collateral = collateral_amount;
-        
+        let borrowed_amount = account.borrows.get(&debt_token).cloned().unwrap_or_default();
+        let collateral_amount = account.deposits.get(&collateral_token).cloned().unwrap_or_default();
+    
         // Update state
-        state.user_borrows.remove(&borrow_key);
-        state.user_deposits.remove(&collateral_key);
-        
-        // Save updated state
-        STATE.save(deps.storage, &state)?;
-
+        account.borrows.remove(&debt_token);
+        account.deposits.remove(&collateral_token);
+    
+        // Save updated account
+        ACCOUNT.save(deps.storage, &account)?;
+    
         // Transfer debt tokens from liquidator to contract
-        let debt_transfer_msg = CosmosMsg::Wasm(WasmMsg::Execute {
+        let debt_transfer_msg = ExecuteMsg::Execute {
             contract_addr: debt_token.clone(),
-            msg: to_binary(&Cw20ExecuteMsg::TransferFrom {
+            msg: to_json_binary(&Cw20ExecuteMsg::TransferFrom {
                 owner: liquidator.to_string(),
                 recipient: _env.contract.address.to_string(),
-                amount: liquidation_amount,
+                amount: borrowed_amount,
             })?,
             funds: vec![],
-        });
-
+        };
+    
         // Transfer collateral to liquidator
-        let collateral_transfer_msg = CosmosMsg::Wasm(WasmMsg::Execute {
-            contract_addr: collateral_token.clone(),
-            msg: to_binary(&Cw20ExecuteMsg::Transfer {
-                recipient: liquidator.to_string(),
-                amount: liquidation_collateral,
-            })?,
-            funds: vec![],
-        });
-
+        let collateral_transfer_msg = ExecuteMsg::Liquidate {
+            borrower: borrower_addr.to_string(),
+            debt_token: debt_token.clone(),
+            collateral_token: collateral_token.clone(),
+        };
+    
         Ok(Response::new()
-            .add_message(debt_transfer_msg)
-            .add_message(collateral_transfer_msg)
             .add_attribute("action", "liquidate")
             .add_attribute("liquidator", liquidator)
             .add_attribute("borrower", borrower)
             .add_attribute("debt_token", debt_token)
-            .add_attribute("debt_amount", liquidation_amount)
+            .add_attribute("debt_amount", borrowed_amount.to_string())
             .add_attribute("collateral_token", collateral_token)
-            .add_attribute("collateral_amount", liquidation_collateral))
+            .add_attribute("collateral_amount", collateral_amount.to_string()))
     }
-}
+    
 
 
-    pub fn receive_message_evm(
-        deps: DepsMut,
-        _source_chain: String,
-        _source_address: String,
-        payload: Binary,
-    ) -> Result<Response, ContractError> {
-        // decode the payload
-        // executeMsgPayload: [sender, message]
-        let decoded = decode(
-            &vec![ParamType::String, ParamType::String],
-            payload.as_slice(),
-        )
-        .unwrap();
+    // pub fn receive_message_evm(
+    //     deps: DepsMut,
+    //     _source_chain: String,
+    //     _source_address: String,
+    //     payload: Binary,
+    // ) -> Result<Response, ContractError> {
+    //     // decode the payload
+    //     // executeMsgPayload: [sender, message]
+    //     let decoded = decode(
+    //         &vec![ParamType::String, ParamType::String],
+    //         payload.as_slice(),
+    //     )
+    //     .unwrap();
 
-        // store message
-        STORED_MESSAGE.save(
-            deps.storage,
-            &Message {
-                sender: decoded[0].to_string(),
-                message: decoded[1].to_string(),
-            },
-        )?;
+    //     // store message
+    //     STORED_MESSAGE.save(
+    //         deps.storage,
+    //         &Message {
+    //             sender: decoded[0].to_string(),
+    //             message: decoded[1].to_string(),
+    //         },
+    //     )?;
 
-        Ok(Response::new())
-    }
+    //     Ok(Response::new())
+    // }
 
     // pub fn increment(deps: DepsMut) -> Result<Response, ContractError> {
     //     STATE.update(deps.storage, |mut state| -> Result<_, ContractError> {
@@ -366,25 +365,25 @@ pub mod execute {
     //     })?;
     //     Ok(Response::new().add_attribute("action", "reset"))
     // }
-}
 
-fn receive_message(
-    _deps: DepsMut,
-    source_chain: String,
-    source_address: String,
-    payload: Binary,
-) -> StdResult<Response> {
-    // Decode and process the payload here
-    let message: String = String::from_utf8(payload.0)
-        .map_err(|_| StdError::generic_err("Invalid payload"))?;
+
+// fn receive_message(
+//     _deps: DepsMut,
+//     source_chain: String,
+//     source_address: String,
+//     payload: Binary,
+// ) -> Result<Response, ContractError> {
+//     // Decode and process the payload here
+//     let message: String = String::from_utf8(payload.0)
+//         .map_err(|_| ContractError::generic_err("Invalid payload"))?;
     
-    // Log the source_chain, source_address, and decoded message
-    Ok(Response::new()
-        .add_attribute("action", "receive_message")
-        .add_attribute("source_chain", source_chain)
-        .add_attribute("source_address", source_address)
-        .add_attribute("message", message))
-}
+//     // Log the source_chain, source_address, and decoded message
+//     Ok(Response::new()
+//         .add_attribute("action", "receive_message")
+//         .add_attribute("source_chain", source_chain)
+//         .add_attribute("source_address", source_address)
+//         .add_attribute("message", message))
+// }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
@@ -563,4 +562,6 @@ mod tests {
         let value: GetBalanceResponse = from_json_binary(&res).unwrap();
         assert_eq!(3, value.balance);
     }
+}
+}
 }

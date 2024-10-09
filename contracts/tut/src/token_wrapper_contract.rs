@@ -1,6 +1,8 @@
+#[cfg(not(feature = "library"))]
+
 use cosmwasm_std::{
-    entry_point, to_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
-    Uint128, Addr, CosmosMsg, WasmMsg, BankMsg, coin,
+    entry_point, to_json_binary,from_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
+    Uint128, Addr, CosmosMsg, WasmMsg, BankMsg, coin,cw20, StdError
 };
 use cw20::{Cw20ExecuteMsg, Cw20ReceiveMsg};
 use schemars::JsonSchema;
@@ -47,7 +49,7 @@ pub fn instantiate(
         wrapped_tokens: vec![],
         cw20_code_id: msg.cw20_code_id,
     };
-    deps.storage.set(b"state", &to_binary(&state)?);
+    deps.storage.set(b"state", &to_json_binary(&state)?);
     Ok(Response::default())
 }
 
@@ -71,14 +73,20 @@ pub fn wrap(
     info: MessageInfo,
     token_address: Addr,
 ) -> StdResult<Response> {
-    let mut state: State = deps.storage.get(b"state").unwrap().unwrap();
+    let state_bytes = deps.storage.get(b"state").ok_or(StdError::not_found("State"))?;
+
+    // Convert Vec<u8> to Binary
+    let state_binary = Binary(state_bytes);
+
+    // Deserialize the state from Binary
+    let mut state: State = from_binary(&state_binary)?;
     
     if let Some((_, wrapped_token)) = state.wrapped_tokens.iter().find(|(addr, _)| addr == &token_address) {
         // Token is already wrapped, mint additional wrapped tokens
         let amount = info.funds.iter().find(|c| c.denom == token_address.to_string()).map(|c| c.amount).unwrap_or(Uint128::zero());
         let msg = CosmosMsg::Wasm(WasmMsg::Execute {
             contract_addr: wrapped_token.to_string(),
-            msg: to_binary(&Cw20ExecuteMsg::Mint {
+            msg: to_json_binary(&Cw20ExecuteMsg::Mint {
                 recipient: info.sender.to_string(),
                 amount,
             })?,
@@ -90,7 +98,7 @@ pub fn wrap(
         let msg = CosmosMsg::Wasm(WasmMsg::Instantiate {
             admin: Some(env.contract.address.to_string()),
             code_id: state.cw20_code_id,
-            msg: to_binary(&cw20::InstantiateMsg {
+            msg: to_json_binary(&cw20::InstantiateMsg {
                 name: format!("Wrapped {}", token_address),
                 symbol: format!("w{}", token_address),
                 decimals: 6,
@@ -104,7 +112,7 @@ pub fn wrap(
             label: format!("Wrapped {}", token_address),
         });
         state.wrapped_tokens.push((token_address, Addr::unchecked("")));
-        deps.storage.set(b"state", &to_binary(&state)?);
+        deps.storage.set(b"state", &to_json_binary(&state)?);
         Ok(Response::new().add_message(msg))
     }
 }
@@ -115,7 +123,13 @@ pub fn unwrap(
     info: MessageInfo,
     wrapped_token_address: Addr,
 ) -> StdResult<Response> {
-    let state: State = deps.storage.get(b"state").unwrap().unwrap();
+    let state_bytes = deps.storage.get(b"state").ok_or(StdError::not_found("State"))?;
+
+    // Convert Vec<u8> to Binary
+    let state_binary = Binary(state_bytes);
+
+    // Deserialize the state from Binary
+    let mut state: State = from_binary(&state_binary)?;
     if let Some((token_address, _)) = state.wrapped_tokens.iter().find(|(_, addr)| addr == &wrapped_token_address) {
         let amount = info.funds.iter().find(|c| c.denom == wrapped_token_address.to_string()).map(|c| c.amount).unwrap_or(Uint128::zero());
         let msg = CosmosMsg::Bank(BankMsg::Send {
@@ -134,7 +148,13 @@ pub fn receive_cw20(
     info: MessageInfo,
     cw20_msg: Cw20ReceiveMsg,
 ) -> StdResult<Response> {
-    let state: State = deps.storage.get(b"state").unwrap().unwrap();
+    let state_bytes = deps.storage.get(b"state").ok_or(StdError::not_found("State"))?;
+
+    // Convert Vec<u8> to Binary
+    let state_binary = Binary(state_bytes);
+
+    // Deserialize the state from Binary
+    let mut state: State = from_binary(&state_binary)?;
     if let Some((token_address, _)) = state.wrapped_tokens.iter().find(|(_, addr)| addr == &info.sender) {
         let msg = CosmosMsg::Bank(BankMsg::Send {
             to_address: cw20_msg.sender,
@@ -149,12 +169,18 @@ pub fn receive_cw20(
 #[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::GetWrappedToken { token_address } => to_binary(&query_wrapped_token(deps, token_address)?),
+        QueryMsg::GetWrappedToken { token_address } => to_json_binary(&query_wrapped_token(deps, token_address)?),
     }
 }
 
 fn query_wrapped_token(deps: Deps, token_address: Addr) -> StdResult<WrappedTokenResponse> {
-    let state: State = deps.storage.get(b"state").unwrap().unwrap();
+    let state_bytes = deps.storage.get(b"state").ok_or(StdError::not_found("State"))?;
+
+    // Convert Vec<u8> to Binary
+    let state_binary = Binary(state_bytes);
+
+    // Deserialize the state from Binary
+    let mut state: State = from_binary(&state_binary)?;
     let wrapped_token = state
         .wrapped_tokens
         .iter()
