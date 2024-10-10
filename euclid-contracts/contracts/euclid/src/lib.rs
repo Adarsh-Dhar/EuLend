@@ -1,4 +1,4 @@
-pub mod contract;
+pub mod add_liquidity;
 mod error;
 pub mod helpers;
 pub mod integration_tests;

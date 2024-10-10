@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    to_json_binary, Addr, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
+    to_json_binary, Addr, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
     Uint128, WasmMsg,
 };
 use cw_storage_plus::{Item};
@@ -19,23 +19,22 @@ pub struct EuclidAddLiquidityMsg {
 pub struct PoolState {
     pub owner: Addr,
     pub total_deposits: Uint128,
+    pub total_borrowed: Uint128,
+    pub interest_rate: Uint128,
 }
 
-// Storage items for Pool State
-const POOL_STATE: Item<PoolState> = Item::new("pool_state");
+// Storage structure for individual user positions
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct UserPosition {
+    pub owner: Addr,
+    pub deposit: Uint128,
+    pub debt: Uint128,
+}
 
-pub fn instantiate(
-    deps: DepsMut,
-    _env: Env,
-    info: MessageInfo,
-    _msg: InstantiateMsg,
-) -> StdResult<Response> {
-    let state = PoolState {
-        owner: info.sender.clone(),
-        total_deposits: Uint128::zero(),
-    };
-    POOL_STATE.save(deps.storage, &state)?;
-    Ok(Response::new().add_attribute("action", "instantiate"))
+// Instantiate message for contract initialization
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct InstantiateMsg {
+    pub interest_rate: Uint128, // e.g., 5% interest
 }
 
 // Deposit message
@@ -48,14 +47,46 @@ pub struct DepositMsg {
     pub pair_amount: Option<Uint128>,
 }
 
-// Execute message to handle deposits
+// Borrow message
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct BorrowMsg {
+    pub amount: Uint128,
+}
+
+// Repay message
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct RepayMsg {
+    pub amount: Uint128,
+}
+
+// Storage items for Pool State and User Positions
+const POOL_STATE: Item<PoolState> = Item::new("pool_state");
+const USER_POSITIONS: Item<UserPosition> = Item::new("user_positions");
+
+// Instantiate function to set up the pool and interest rate
+pub fn instantiate(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    msg: InstantiateMsg,
+) -> StdResult<Response> {
+    let state = PoolState {
+        owner: info.sender.clone(),
+        total_deposits: Uint128::zero(),
+        total_borrowed: Uint128::zero(),
+        interest_rate: msg.interest_rate,
+    };
+    POOL_STATE.save(deps.storage, &state)?;
+    Ok(Response::new().add_attribute("action", "instantiate"))
+}
+
+// Execute function to handle deposits, borrowing, and repayments
 pub fn execute(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
     msg: DepositMsg,
 ) -> Result<Response, ContractError> {
-    // Handle token deposits here, simple storage update.
     let mut state = POOL_STATE.load(deps.storage)?;
     state.total_deposits += msg.amount;
     POOL_STATE.save(deps.storage, &state)?;
@@ -106,6 +137,74 @@ pub fn add_liquidity(
         .add_attribute("amount2", amount2.to_string()))
 }
 
+// Borrow function
+pub fn borrow(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    msg: BorrowMsg,
+) -> Result<Response, ContractError> {
+    let mut state = POOL_STATE.load(deps.storage)?;
+    let mut user_position = USER_POSITIONS
+        .may_load(deps.storage)?
+        .unwrap_or(UserPosition {
+            owner: info.sender.clone(),
+            deposit: Uint128::zero(),
+            debt: Uint128::zero(),
+        });
+
+    // Ensure there's enough liquidity for the requested borrow amount
+    if msg.amount > state.total_deposits {
+        return Err(ContractError::InsufficientLiquidity {});
+    }
+
+    // Update user's debt and pool state
+    user_position.debt += msg.amount;
+    state.total_borrowed += msg.amount;
+    state.total_deposits -= msg.amount;
+
+    POOL_STATE.save(deps.storage, &state)?;
+    USER_POSITIONS.save(deps.storage, &user_position)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "borrow")
+        .add_attribute("borrowed_amount", msg.amount.to_string()))
+}
+
+// Repay function
+pub fn repay(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    msg: RepayMsg,
+) -> Result<Response, ContractError> {
+    let mut state = POOL_STATE.load(deps.storage)?;
+    let mut user_position = USER_POSITIONS
+        .may_load(deps.storage)?
+        .unwrap_or(UserPosition {
+            owner: info.sender.clone(),
+            deposit: Uint128::zero(),
+            debt: Uint128::zero(),
+        });
+
+    // Ensure the user has enough debt to repay
+    if msg.amount > user_position.debt {
+        return Err(ContractError::Overpayment {});
+    }
+
+    // Update the user's debt and pool state
+    user_position.debt -= msg.amount;
+    state.total_borrowed -= msg.amount;
+    state.total_deposits += msg.amount;
+
+    POOL_STATE.save(deps.storage, &state)?;
+    USER_POSITIONS.save(deps.storage, &user_position)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "repay")
+        .add_attribute("repaid_amount", msg.amount.to_string()))
+}
+
 // Query function to get pool state
 pub fn query_pool_state(deps: Deps) -> StdResult<Binary> {
     let state = POOL_STATE.load(deps.storage)?;
@@ -120,6 +219,12 @@ pub enum ContractError {
 
     #[error("Invalid Pair Data")]
     InvalidPairData {},
+
+    #[error("Insufficient Liquidity")]
+    InsufficientLiquidity {},
+
+    #[error("Overpayment Error")]
+    Overpayment {},
 }
 
 #[cfg(test)]
@@ -132,7 +237,9 @@ mod tests {
     fn test_deposit_without_liquidity() {
         let mut deps = mock_dependencies();
         let info = mock_info("sender", &[]);
-        let msg = InstantiateMsg {};
+        let msg = InstantiateMsg {
+            interest_rate: Uint128::new(500),
+        };
         let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
         assert_eq!(res.attributes[0].value, "instantiate");
 
@@ -152,7 +259,9 @@ mod tests {
     fn test_deposit_with_liquidity() {
         let mut deps = mock_dependencies();
         let info = mock_info("sender", &[]);
-        let msg = InstantiateMsg {};
+        let msg = InstantiateMsg {
+            interest_rate: Uint128::new(500),
+        };
         let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
         assert_eq!(res.attributes[0].value, "instantiate");
 
