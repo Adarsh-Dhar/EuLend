@@ -69,6 +69,8 @@ export function ChainSelect({
 
   return (
     <ThemeProvider>
+          {/* @ts-ignore */}
+
       <Box
         display="flex"
         justifyContent="center"
@@ -103,7 +105,9 @@ export function ChainSelect({
                   paddingX: '$4',
                 }}
               />
+              
             ) : (
+              // @ts-ignore
               <Box
                 display="flex"
                 justifyContent="center"
@@ -123,6 +127,8 @@ export function ChainSelect({
         >
           {options.map((option) => (
             <Combobox.Item key={option.value} textValue={option.label}>
+          {/* @ts-ignore */}
+
               <ChainOption logo={option.logo ?? ''} label={option.label} />
             </Combobox.Item>
           ))}

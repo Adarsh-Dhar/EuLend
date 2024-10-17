@@ -42,6 +42,8 @@ function CreateCosmosApp({ Component, pageProps }: AppProps) {
         // @ts-ignore
         signerOptions={signerOptions}
       >
+          {/* @ts-ignore */}
+
         <Box
           className={themeClass}
           minHeight="100dvh"
@@ -49,8 +51,11 @@ function CreateCosmosApp({ Component, pageProps }: AppProps) {
         >
           {/* @ts-ignore */}
           <Component {...pageProps} />
+
+
         </Box>
       </ChainProvider>
+
     </ThemeProvider>
   );
 }

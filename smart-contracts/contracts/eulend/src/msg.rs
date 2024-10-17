@@ -1,4 +1,5 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
+use cosmwasm_std::{Uint128};
 
 
 #[cw_serde]
@@ -9,20 +10,20 @@ pub struct InstantiateMsg {}
 pub enum ExecuteMsg {
     Deposit {
         token_address: String,
-        amount: f64,
+        amount: Uint128,
     },
     Withdraw {
         token_address: String,
-        amount: f64,
+        amount: Uint128,
     },
     Borrow {
         borrow_token_address: String,
-        amount: f64,
+        amount: Uint128,
         collateral_token_address: String,
     },
     Repay {
         token_address: String,
-        amount: f64,
+        amount: Uint128,
     },
     // Liquidate {
     //     borrower: String,
@@ -31,20 +32,20 @@ pub enum ExecuteMsg {
     // },
     // Transfer {
     //     to_address: String,
-    //     amount: f64,
+    //     amount: Uint128,
     // },
     // AddLiquidity {
     //     token1: String,
     //     token2: String,
-    //     amount1: f64,
-    //     amount2: f64,
+    //     amount1: Uint128,
+    //     amount2: Uint128,
     // },
     // CreateLendingPool { 
     //     params: LendingPoolParams 
     // },
     // UpdatePrice { 
     //     token_address: String, 
-    //     new_price: f64
+    //     new_price: Uint128
     // },
 }
 
@@ -61,5 +62,5 @@ pub enum QueryMsg {
 // We define a custom struct for each query response
 #[cw_serde]
 pub struct GetCountResponse {
-    pub count: f64,
+    pub count: Uint128,
 }

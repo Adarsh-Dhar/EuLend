@@ -1,6 +1,6 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
+use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Decimal};
 use cw2::set_contract_version;
 use cw_storage_plus::{Item};
 use crate::error::ContractError;
@@ -11,7 +11,7 @@ use crate::state::{STATE, Account, ACCOUNT,ACCOUNT_STORAGE};
 const CONTRACT_NAME: &str = "crates.io:backend";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-const ID_COUNTER: Item<i32> = Item::new("id_counter");
+const ID_COUNTER: Item<Uint128> = Item::new("id_counter");
 
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -24,14 +24,14 @@ pub fn instantiate(
     // Load the current ID counter, or initialize it to 0 if it doesn't exist
     let mut current_id = match ID_COUNTER.may_load(deps.storage)? {
         Some(id) => id,
-        None => 0,
+        None => Uint128::new     (0),
     };
 
     // Create a new Account with an empty `deposits` and `borrows` Map
     let account = Account {
         id: current_id,
-        balance: 0.0,
-        debt: 0.0,
+        balance: Uint128::new(0),
+        debt: Uint128::new(0),
         owner: info.sender.clone(),
     };
 
@@ -39,7 +39,7 @@ pub fn instantiate(
     ACCOUNT.save(deps.storage, &account)?;
 
     // Increment the ID counter for the next account
-    current_id += 1;
+    current_id += Uint128::new(1);
     ID_COUNTER.save(deps.storage, &current_id)?;
 
     // Set contract version (or any other state if necessary)
@@ -126,10 +126,10 @@ pub mod execute {
 
     pub fn deposit(
         deps: DepsMut,
-        env: Env,
+        _env: Env,
         info: MessageInfo,
         token_address: String,
-        amount: f64,
+        amount: Uint128,
     ) ->  Result<Response, ContractError> {
         let mut account = ACCOUNT.load(deps.storage)?;
         let depositor = info.sender;
@@ -140,7 +140,7 @@ pub mod execute {
         }
     
         // Update user's deposit for the specific token
-        let current_balance = account.balance;
+        let _current_balance = account.balance;
 
    
         // Update the total balance
@@ -151,7 +151,7 @@ pub mod execute {
     
         // If token is native, it's already sent with the transaction
         // If it's a cw20 token, we need to execute a transfer
-        let transfer_msg = if token_address == "native" {
+        let _transfer_msg = if token_address == "native" {
             None
         } else {
             Some(ExecuteMsg::Deposit {
@@ -172,7 +172,7 @@ pub mod execute {
         _env: Env,
         info: MessageInfo,
         token_address: String,
-        amount: f64,
+        amount: Uint128,
     ) -> Result<Response, ContractError> {
         let mut account = ACCOUNT.load(deps.storage)?;
         let withdrawer = info.sender;
@@ -213,15 +213,16 @@ pub mod execute {
 
     pub fn borrow(
         deps: DepsMut,
-        env: Env,
+        _env: Env,
         info: MessageInfo,
         borrow_token_address: String,
-        amount: f64,
+        amount: Uint128,
         collateral_token_address: String,
     ) -> Result<Response, ContractError>  {
-        const BORROW_RATIO : f64 = 0.8;
+        const BORROW_RATIO : Decimal = Decimal::percent(80);
         let amount_usdt = amount;
-        let collateral_usdt = amount_usdt / BORROW_RATIO;
+        let amount_usdt_decimal = Decimal::from_atomics(amount_usdt, 0).unwrap();
+        let collateral_usdt = amount_usdt_decimal / BORROW_RATIO;
         let collateral_native = collateral_usdt.clone();
 
         let mut account = ACCOUNT.load(deps.storage)?;
@@ -235,16 +236,21 @@ pub mod execute {
     
         // Check if the borrower has enough collateral
         let current_balance = account.balance;
-        if current_balance < collateral_usdt {
+
+       let collateral_usdt_int = collateral_usdt.to_uint_floor();
+
+       let collateral_native_int = collateral_native.to_uint_floor() ;
+
+        if current_balance < collateral_usdt_int {
             return Err(ContractError::InsufficientFunds{});
         }
 
-        account.debt += amount_usdt;
+        account.debt = account.debt + amount_usdt;
     
         // Update borrower's collateral and borrow
-        ACCOUNT_STORAGE.deposits.save(deps.storage, collateral_token_address.clone(), &collateral_native)?;
+        ACCOUNT_STORAGE.deposits.save(deps.storage, collateral_token_address.clone(), &collateral_native_int)?;
 
-        ACCOUNT_STORAGE.borrows.save(deps.storage,borrow_token_address.clone(), &amount);
+        
   
     
         // Save updated account
@@ -275,7 +281,8 @@ pub mod execute {
             .add_attribute("borrower", borrower)
             .add_attribute("token", borrow_token_address)
             .add_attribute("debt", account.debt.to_string())
-
+            .add_attribute("balance", account.balance.to_string())
+         
             .add_attribute("amount", amount.to_string())
             .add_attribute("collateral_token", collateral_token_address)
             .add_attribute("collateral_amount", collateral_usdt.to_string()))
@@ -284,10 +291,10 @@ pub mod execute {
 
     pub fn repay(
         deps: DepsMut,
-        env: Env,
+        _env: Env,
         info: MessageInfo,
         token_address: String,
-        amount: f64,
+        amount: Uint128,
     ) -> Result<Response, ContractError> {
         
         let repayer = info.sender.clone();
@@ -324,7 +331,7 @@ pub mod execute {
         account.debt -= amount_usdt;
     
         // If the borrowed amount is fully repaid, remove the token entry from `borrows`
-        if token_amount == 0.0 {
+        if token_amount == Uint128::new(0) {
             ACCOUNT_STORAGE.borrows.remove(deps.storage, token_address.clone());
         } else {
             // Otherwise, save the updated borrowed amount
@@ -335,7 +342,7 @@ pub mod execute {
         ACCOUNT.save(deps.storage, &account)?;
         
         // Handle token transfer (if it's not native)
-        let transfer_msg = if token_address == "native" {
+        let _transfer_msg = if token_address == "native" {
             None
         } else {
             Some(ExecuteMsg::Repay {
@@ -410,8 +417,8 @@ pub mod execute {
     //     info: MessageInfo,
     //     token1: String,
     //     token2: String,
-    //     amount1: f64,
-    //     amount2: f64,
+    //     amount1: Uint128,
+    //     amount2: Uint128,
     // ) -> Result<Response, ContractError> {
     //     // Preparing the Euclid add_liquidity message
     //     let euclid_msg = ExecuteMsg::AddLiquidity {
@@ -442,8 +449,8 @@ pub mod execute {
     //     info: MessageInfo,
     //     token_1: String,
     //     token_2: String,
-    //     amount_1: f64,
-    //     amount_2: f64,
+    //     amount_1: Uint128,
+    //     amount_2: Uint128,
     //     slippage_tolerance: u64,
     // ) -> StdResult<Response> {
     //     // Here we would typically interact with the Euclid SDK
@@ -498,11 +505,11 @@ pub mod execute {
    
 
     pub fn convert_to_usdt(
-        deps: DepsMut,
+        _deps: DepsMut,
         _info: MessageInfo,
-        token_address: String,
-        amount: f64,
-    ) -> StdResult<f64> {
+        _token_address: String,
+        amount: Uint128,
+    ) -> StdResult<Uint128> {
         // Dummy conversion logic
         // For now, we'll just assume the conversion rate is 1:1 for simplicity.
         
@@ -513,11 +520,11 @@ pub mod execute {
     }
 
     pub fn convert_to_token(
-        deps: DepsMut,
+        _deps: DepsMut,
         _info: MessageInfo,
-        token_address: String,
-        amount: f64,
-    ) -> StdResult<f64> {
+        _token_address: String,
+        amount: Uint128,
+    ) -> StdResult<Uint128> {
         // Dummy conversion logic
         // For now, we'll just assume the conversion rate is 1:1 for simplicity.
         
@@ -531,7 +538,7 @@ pub mod execute {
     //     deps: DepsMut,
     //     info: MessageInfo,
     //     vlp_address: String,
-    //     lp_allocation: f64,
+    //     lp_allocation: Uint128,
     //     timeout: u64,
     //     cross_chain_addresses: Vec<String>,
     // ) -> StdResult<WasmMsg> {
@@ -563,10 +570,10 @@ pub mod execute {
     //     deps: DepsMut, 
     //     _env: Env, 
     //     info: MessageInfo, 
-    //     amount_in: f64, 
+    //     amount_in: Uint128, 
     //     asset_in: String, 
     //     asset_out: String, 
-    //     min_amount_out: f64,
+    //     min_amount_out: Uint128,
     //     swaps: Vec<String>,
     //     cross_chain_addresses: Vec<String>,
     //     timeout: Option<u64>,
@@ -597,11 +604,11 @@ pub mod execute {
     // pub fn simulate_swap(
     //     deps: Deps, 
     //     asset_in: String, 
-    //     amount_in: f64, 
+    //     amount_in: Uint128, 
     //     asset_out: String, 
     //     swaps: Vec<String>
     // ) -> StdResult<Binary> {
-    //     let simulated_amount_out = f64::new(1000); // Hardcoded for simulation
+    //     let simulated_amount_out = Uint128::new(1000); // Hardcoded for simulation
     //     let swap = SimulatedSwap {
     //         amount_out: simulated_amount_out,
     //         asset_out: asset_out.clone(),
@@ -620,7 +627,7 @@ pub mod execute {
     //     Ok(Response::new().add_attribute("action", "increment"))
     // }
 
-    // pub fn reset(deps: DepsMut, info: MessageInfo, count: f64) -> Result<Response, ContractError> {
+    // pub fn reset(deps: DepsMut, info: MessageInfo, count: Uint128) -> Result<Response, ContractError> {
     //     STATE.update(deps.storage, |mut state| -> Result<_, ContractError> {
     //         if info.sender != state.owner {
     //             return Err(ContractError::Unauthorized {});
@@ -653,11 +660,10 @@ pub mod query {
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, from_binary};
+    use cosmwasm_std::{coins};
     use crate::state::{Account, ACCOUNT, ACCOUNT_STORAGE};
-    use cw_storage_plus::Map;
     use crate::contract::{instantiate, execute};
-    use crate::contract::execute::{deposit, withdraw, borrow, repay};
+    
 
     #[test]
 fn test_instantiate() {
@@ -682,16 +688,16 @@ fn test_instantiate() {
 
     // Query the state to verify that the account was created correctly
     let account: Account = ACCOUNT.load(&deps.storage).unwrap();
-    assert_eq!(account.id, 0);
-    assert_eq!(account.balance, 0.0);
-    assert_eq!(account.debt, 0.0);
+    assert_eq!(account.id, Uint128::new(0));
+    assert_eq!(account.balance, Uint128::new(0));
+    assert_eq!(account.debt, Uint128::new(0));
     assert_eq!(account.owner, info.sender);
     // assert!(ACCOUNT_STORAGE.deposits(&deps.storage).is_empty());
     // assert!(ACCOUNT_STORAGE.borrows(&deps.storage).is_empty());
 
     // Verify that the ID counter was incremented
     let current_id = ID_COUNTER.load(&deps.storage).unwrap();
-    assert_eq!(current_id, 1);
+    assert_eq!(current_id, Uint128::new(1));
 }
 
 
@@ -706,14 +712,14 @@ fn test_execute_deposit() {
     
     // Create an account
     let account = Account {
-        id: 0,
-        balance: 100.0,
-        debt: 0.0,
+        id: Uint128::new(0),
+        balance: Uint128::new(100),
+        debt: Uint128::new(0),
         owner: info.sender.clone(),
         
     };
 
-    if(account.owner != info.sender){
+    if account.owner != info.sender {
         panic!("Unauthorized");
     }
 
@@ -723,7 +729,7 @@ fn test_execute_deposit() {
 
     let msg = ExecuteMsg::Deposit {
         token_address: "native".to_string(),
-        amount: 50.0,
+        amount: Uint128::new(50),
     };
 
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
@@ -737,7 +743,7 @@ fn test_execute_deposit() {
 
     // Check that balance is updated
     let updated_account = ACCOUNT.load(&deps.storage).unwrap();
-    assert_eq!(updated_account.balance, 150.0);
+    assert_eq!(updated_account.balance, Uint128::new(150));
 }
 
 
@@ -752,13 +758,13 @@ fn test_execute_withdraw() {
 
     // Create an account with sufficient balance
     let account = Account {
-        id: 0,
-        balance: 200.0,
-        debt: 0.0,
+        id: Uint128::new(0),
+        balance: Uint128::new(200),
+        debt: Uint128::new(0),
         owner: info.sender.clone(),
     };
 
-    if(account.owner != info.sender){
+    if account.owner != info.sender {
         panic!("Unauthorized");
     }
 
@@ -768,7 +774,7 @@ fn test_execute_withdraw() {
 
     let msg = ExecuteMsg::Withdraw {
         token_address: "native".to_string(),
-        amount: 50.0,
+        amount: Uint128::new(50),
     };
 
     
@@ -785,7 +791,7 @@ fn test_execute_withdraw() {
 
     // Check that balance is updated
     let updated_account = ACCOUNT.load(&deps.storage).unwrap();
-    assert_eq!(updated_account.balance, 150.0);
+    assert_eq!(updated_account.balance, Uint128::new(150));
 }
 
 #[test]
@@ -796,17 +802,19 @@ fn test_execute_borrow() {
     let info = mock_info("owner", &coins(1000, "earth"));
     let msg = InstantiateMsg {};
     let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-    let amount = 50.0;  
+    let amount = Uint128::new(100);  
     let borrow_token_address = "native".to_string();
     let mut_deps = deps.as_mut();
 
     let account = Account {
-        id: 0,
-        balance: 500.0,
-        debt: 150.0, // Current debt
+        id: Uint128::new(0),
+        balance: Uint128::new(500),
+        debt: Uint128::new(150), // Current debt
         owner: info.sender.clone(),
         
     };
+
+    ACCOUNT.save(mut_deps.storage, &account).unwrap();
 
 
     let msg = ExecuteMsg::Borrow {
@@ -814,8 +822,6 @@ fn test_execute_borrow() {
         amount: amount.clone(),
         collateral_token_address: "native_collateral".to_string(),
     };
-
-    ACCOUNT_STORAGE.borrows.save(mut_deps.storage,borrow_token_address.clone(),&amount);
 
 
 
@@ -825,16 +831,19 @@ fn test_execute_borrow() {
 
 
     // Check response attributes
-    assert_eq!(res.attributes.len(), 7);
+    assert_eq!(res.attributes.len(), 8);
     assert_eq!(res.attributes[0], ("action", "borrow"));
     assert_eq!(res.attributes[1], ("borrower", "owner"));
     assert_eq!(res.attributes[2], ("token", "native"));
-    assert_eq!(res.attributes[3], ("debt", "200"));
-    assert_eq!(res.attributes[4], ("amount", "50"));
+    assert_eq!(res.attributes[3], ("debt", "250"));
 
-    assert_eq!(res.attributes[5], ("collateral_token", "native_collateral"));
+    assert_eq!(res.attributes[4], ("balance", "500"));
 
-    assert_eq!(res.attributes[6], ("collateral_amount", "62.5"));
+    assert_eq!(res.attributes[5], ("amount", "100"));
+
+    assert_eq!(res.attributes[6], ("collateral_token", "native_collateral"));
+
+    assert_eq!(res.attributes[7], ("collateral_amount", "125"));
 
 
 
@@ -844,54 +853,53 @@ fn test_execute_borrow() {
 }
 
 
-// #[test]
-// fn test_execute_repay() {
-//     let mut deps = mock_dependencies();
-//     let env = mock_env();
+#[test]
+fn test_execute_repay() {
+    let mut deps = mock_dependencies();
+    let env = mock_env();
 
-//     let info = mock_info("owner", &coins(1000, "earth"));
-//     let msg = InstantiateMsg {};
-//     let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-//     let amount = 50.0;  
-//     let borrow_token_address = "native".to_string();
-//     let mut_deps = deps.as_mut();
+    let info = mock_info("owner", &coins(1000, "earth"));
+    let msg = InstantiateMsg {};
+    let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+    let amount = Uint128::new(50);  
+    let token_address = "native".to_string();
+    let mut_deps = deps.as_mut();
 
-//     let account = Account {
-//         id: 0,
-//         balance: 500.0,
-//         debt: 150.0, // Current debt
-//         owner: info.sender.clone(),
+    let account = Account {
+        id: Uint128::new(0),
+        balance: Uint128::new(500),
+        debt: Uint128::new(150), // Current debt
+        owner: info.sender.clone(),
         
-//     };
+    };
+
+    ACCOUNT.save(mut_deps.storage, &account).unwrap();
 
 
-//     let msg = ExecuteMsg::Borrow {
-//         borrow_token_address: borrow_token_address.clone(),
-//         amount: amount.clone(),
-//         collateral_token_address: "native_collateral".to_string(),
-//     };
+    let msg = ExecuteMsg::Repay {
+        token_address: token_address.clone(),
+        amount: amount.clone(),
+        
+    };
 
-//     ACCOUNT_STORAGE.borrows.save(mut_deps.storage,borrow_token_address.clone(),&amount);
-
-
-
-//     // Call withdraw function
-//     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+    ACCOUNT_STORAGE.borrows.save(mut_deps.storage,token_address.clone(),&amount);
 
 
 
-//     // Check response attributes
-//     assert_eq!(res.attributes.len(), 7);
-//     assert_eq!(res.attributes[0], ("action", "borrow"));
-//     assert_eq!(res.attributes[1], ("borrower", "owner"));
-//     assert_eq!(res.attributes[2], ("token", "native"));
-//     assert_eq!(res.attributes[3], ("debt", "200"));
-//     assert_eq!(res.attributes[4], ("amount", "50"));
+    // Call withdraw function
+    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
-//     assert_eq!(res.attributes[5], ("collateral_token", "native_collateral"));
 
-//     assert_eq!(res.attributes[6], ("collateral_amount", "62.5"));
 
-// }
+    // Check response attributes
+    assert_eq!(res.attributes.len(), 4);
+    assert_eq!(res.attributes[0], ("action", "repay"));
+    assert_eq!(res.attributes[1], ("repayer", "owner"));
+    assert_eq!(res.attributes[2], ("token", "native"));
+
+    assert_eq!(res.attributes[3], ("amount", "50"));
+
+
+}
 
 }

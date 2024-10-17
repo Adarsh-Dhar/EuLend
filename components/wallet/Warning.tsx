@@ -16,13 +16,18 @@ export const WarningIcon = <Icon name="errorWarningLine" size="$lg" />;
 
 export function Warning({ text, icon = WarningIcon }: WarningProps) {
   return (
+    // @ts-ignore
     <Box
       p="$6"
       borderRadius="$md"
       backgroundColor={useColorModeValue("$orange200", "$orange300")}
     >
       <Stack>
+                  {/* @ts-ignore */}
+
         <Box mt="$2">{icon}</Box>
+          {/* @ts-ignore */}
+
         <Box flex="1" ml="$4" maxHeight="$24" overflow="scroll">
           <Text
             color={useColorModeValue("$gray700", "$gray800")}

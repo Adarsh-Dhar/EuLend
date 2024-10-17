@@ -10,7 +10,10 @@ export default function Home() {
   }
 
   return (
+    // @ts-ignore
     <Layout>
+          {/* @ts-ignore */}
+
       <Wallet chainName={chainName} onChainChange={onChainChange} />
     </Layout>
   );
