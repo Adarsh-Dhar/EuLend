@@ -718,10 +718,30 @@ pub mod query {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins};
+    use cosmwasm_std::testing::{
+        mock_info,
+        mock_dependencies,
+        mock_env,
+        MockApi,
+        MockQuerier,
+        MockStorage,
+        
+    };
+    use cosmwasm_std::{from_binary, coins, Timestamp, Addr, SystemError, WasmQuery,SystemResult, QuerierResult, OwnedDeps};
     use crate::state::{Account, ACCOUNT, ACCOUNT_STORAGE};
     use crate::contract::{instantiate, execute};
+    use pyth_sdk_cw::{
+        testing::MockPyth,
+        Price,
+        PriceFeed,
+        PriceIdentifier,
+        UnixTimestamp,
+    };
+
+
+    const PYTH_CONTRACT_ADDR: &str = "pyth_contract_addr";
+    // For real deployments, see list of price feed ids here https://pyth.network/developers/price-feed-ids
+    const PRICE_ID: &str = "63f341689d98a12ef60a5cff1d7f85c70a9e17bf1575f0e7c0b2512d48b1c8b3";
     
 
     #[test]
@@ -729,7 +749,10 @@ fn test_instantiate() {
     let mut deps = mock_dependencies();  // Mock the dependencies
 
     // Create a mock InstantiateMsg (modify if you have fields in InstantiateMsg)
-    let msg = InstantiateMsg {};
+    let msg = InstantiateMsg {
+        pyth_contract_addr: PYTH_CONTRACT_ADDR.to_string(),
+        price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
+    };
     
     // Mock MessageInfo with sender "creator" and some initial funds
     let info = mock_info("creator", &coins(1000, "earth"));
@@ -766,7 +789,10 @@ fn test_execute_deposit() {
         let env = mock_env();
     
     let info = mock_info("owner", &coins(1000, "earth"));
-    let msg = InstantiateMsg {};
+    let msg = InstantiateMsg {
+        pyth_contract_addr: PYTH_CONTRACT_ADDR.to_string(),
+        price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
+    };
     let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
     
     // Create an account
@@ -812,7 +838,10 @@ fn test_execute_withdraw() {
         let env = mock_env();
     
     let info = mock_info("owner", &coins(1000, "earth"));
-    let msg = InstantiateMsg {};
+    let msg = InstantiateMsg {
+        pyth_contract_addr: PYTH_CONTRACT_ADDR.to_string(),
+        price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
+    };
     let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
     // Create an account with sufficient balance
@@ -859,7 +888,10 @@ fn test_execute_borrow() {
     let env = mock_env();
 
     let info = mock_info("owner", &coins(1000, "earth"));
-    let msg = InstantiateMsg {};
+    let msg = InstantiateMsg {
+        pyth_contract_addr: PYTH_CONTRACT_ADDR.to_string(),
+        price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
+    };
     let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
     let amount = Uint128::new(100);  
     let borrow_token_address = "native".to_string();
@@ -918,7 +950,10 @@ fn test_execute_repay() {
     let env = mock_env();
 
     let info = mock_info("owner", &coins(1000, "earth"));
-    let msg = InstantiateMsg {};
+    let msg = InstantiateMsg {
+        pyth_contract_addr: PYTH_CONTRACT_ADDR.to_string(),
+        price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
+    };
     let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
     let amount = Uint128::new(50);  
     let token_address = "native".to_string();
@@ -959,6 +994,120 @@ fn test_execute_repay() {
     assert_eq!(res.attributes[3], ("amount", "50"));
 
 
+}
+
+fn oracle_default_state() -> Oracle {
+    Oracle {
+        pyth_contract_addr: Addr::unchecked(PYTH_CONTRACT_ADDR),
+        price_feed_id:      PriceIdentifier::from_hex(PRICE_ID).unwrap(),
+    }
+}
+
+fn oracle_setup_test(
+    oracle: &Oracle,
+    mock_pyth: &MockPyth,
+    block_timestamp: UnixTimestamp,
+) -> (OwnedDeps<MockStorage, MockApi, MockQuerier>, Env) {
+    let mut dependencies = mock_dependencies();
+
+    let mock_pyth_copy = (*mock_pyth).clone();
+    dependencies
+        .querier
+        .update_wasm(move |x| handle_wasm_query(&mock_pyth_copy, x));
+
+    ORACLE.save(dependencies.as_mut().storage, oracle).unwrap();
+
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(u64::try_from(block_timestamp).unwrap());
+
+    (dependencies, env)
+}
+
+fn handle_wasm_query(pyth: &MockPyth, wasm_query: &WasmQuery) -> QuerierResult {
+    match wasm_query {
+        WasmQuery::Smart { contract_addr, msg } if *contract_addr == PYTH_CONTRACT_ADDR => {
+            pyth.handle_wasm_query(msg)
+        }
+        WasmQuery::Smart { contract_addr, .. } => {
+            SystemResult::Err(SystemError::NoSuchContract {
+                addr: contract_addr.clone(),
+            })
+        }
+        WasmQuery::Raw { contract_addr, .. } => {
+            SystemResult::Err(SystemError::NoSuchContract {
+                addr: contract_addr.clone(),
+            })
+        }
+        WasmQuery::ContractInfo { contract_addr, .. } => {
+            SystemResult::Err(SystemError::NoSuchContract {
+                addr: contract_addr.clone(),
+            })
+        }
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn test_get_price() {
+    // Arbitrary unix timestamp to coordinate the price feed timestamp and the block time.
+    let current_unix_time = 10_000_000;
+
+    let mut mock_pyth = MockPyth::new(Duration::from_secs(60), Coin::new(1, "foo"), &[]);
+    let price_feed = PriceFeed::new(
+        PriceIdentifier::from_hex(PRICE_ID).unwrap(),
+        Price {
+            price:        100,
+            conf:         10,
+            expo:         -1,
+            publish_time: current_unix_time,
+        },
+        Price {
+            price:        200,
+            conf:         20,
+            expo:         -1,
+            publish_time: current_unix_time,
+        },
+    );
+
+    mock_pyth.add_feed(price_feed);
+
+    let (deps, env) = oracle_setup_test(&oracle_default_state(), &mock_pyth, current_unix_time);
+
+    let msg = QueryMsg::FetchPrice {};
+    let result = query(deps.as_ref(), env, msg)
+        .and_then(|binary| from_binary::<FetchPriceResponse>(&binary));
+
+    assert_eq!(result.map(|r| r.current_price.price), Ok(100));
+}
+
+#[test]
+fn test_query_fetch_valid_time_period() {
+    // Arbitrary unix timestamp to coordinate the price feed timestamp and the block time.
+    let current_unix_time = 10_000_000;
+
+    let mock_pyth = MockPyth::new(Duration::from_secs(60), Coin::new(1, "foo"), &[]);
+    let (deps, env) = oracle_setup_test(&oracle_default_state(), &mock_pyth, current_unix_time);
+
+    let msg = QueryMsg::FetchValidTimePeriod {};
+    let result =
+        query(deps.as_ref(), env, msg).and_then(|binary| from_binary::<Duration>(&binary));
+
+    assert_eq!(result.map(|r| r.as_secs()), Ok(60));
+}
+
+#[test]
+fn test_query_fetch_update_fee() {
+    // Arbitrary unix timestamp to coordinate the price feed timestamp and the block time.
+    let current_unix_time = 10_000_000;
+
+    let mock_pyth = MockPyth::new(Duration::from_secs(60), Coin::new(1, "foo"), &[]);
+    let (deps, env) = oracle_setup_test(&oracle_default_state(), &mock_pyth, current_unix_time);
+
+    let msg = QueryMsg::FetchUpdateFee {
+        vaas: vec![Binary(vec![1, 2, 3])],
+    };
+    let result = query(deps.as_ref(), env, msg).and_then(|binary| from_binary::<Coin>(&binary));
+    assert_eq!(result.map(|r| r.to_string()), Ok(String::from("1foo")))
 }
 
 }
