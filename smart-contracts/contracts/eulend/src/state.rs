@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use cosmwasm_std::Addr;
 use cw_storage_plus::{Item, Map};
 use cosmwasm_std::Uint128;
+use pyth_sdk_cw::PriceIdentifier;
 
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq,JsonSchema)]
@@ -91,6 +92,16 @@ pub struct SimulatedSwap {
 // pub struct State {
 //     pub prices: Vec<(Addr, Uint128)>,
 // }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Oracle {
+    // Available price feeds and their ids are listed in pyth-sdk-cw Readme.
+    pub price_feed_id:      PriceIdentifier,
+    // Contract address of Pyth in different networks are listed in pyth-sdk-cw Readme.
+    pub pyth_contract_addr: Addr,
+}
+
+pub const ORACLE: Item<Oracle> = Item::new("oracle");
 
 pub const ACCOUNT: Item<Account> = Item::new("account");
 

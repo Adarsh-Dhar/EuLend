@@ -1,9 +1,17 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
-use cosmwasm_std::{Uint128};
+use cosmwasm_std::{Uint128, Binary, Coin};
+use std::time::Duration;
+use pyth_sdk_cw::{
+    Price,
+    PriceIdentifier,
+};
 
 
 #[cw_serde]
-pub struct InstantiateMsg {}
+pub struct InstantiateMsg {
+    pub price_feed_id:      PriceIdentifier,
+    pub pyth_contract_addr: String,
+}
 
 
 #[cw_serde]
@@ -54,13 +62,16 @@ pub enum ExecuteMsg {
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
-    // GetCount returns the current count as a json-encoded number
-    #[returns(GetCountResponse)]
-    GetCount {},
+    #[returns(FetchPriceResponse)]
+    FetchPrice {},
+    #[returns(Coin)]
+    FetchUpdateFee { vaas: Vec<Binary> },
+    #[returns(Duration)]
+    FetchValidTimePeriod,
 }
 
-// We define a custom struct for each query response
 #[cw_serde]
-pub struct GetCountResponse {
-    pub count: Uint128,
+pub struct FetchPriceResponse {
+    pub current_price: Price,
+    pub ema_price:     Price,
 }

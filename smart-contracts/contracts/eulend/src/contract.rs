@@ -1,11 +1,16 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Decimal};
+use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Decimal, StdError, Coin};
 use cw2::set_contract_version;
 use cw_storage_plus::{Item};
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, GetCountResponse, InstantiateMsg, QueryMsg};
-use crate::state::{STATE, Account, ACCOUNT,ACCOUNT_STORAGE};
+use crate::msg::{ExecuteMsg,InstantiateMsg, QueryMsg, FetchPriceResponse};
+use crate::state::{Account, ACCOUNT,ACCOUNT_STORAGE, Oracle, ORACLE};
+use pyth_sdk_cw::{ get_update_fee,
+get_valid_time_period,
+    query_price_feed,
+    PriceFeedResponse,};
+    use std::time::Duration;
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:backend";
@@ -19,7 +24,7 @@ pub fn instantiate(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    _msg: InstantiateMsg,
+    msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     // Load the current ID counter, or initialize it to 0 if it doesn't exist
     let mut current_id = match ID_COUNTER.may_load(deps.storage)? {
@@ -38,6 +43,12 @@ pub fn instantiate(
     // Save the new account
     ACCOUNT.save(deps.storage, &account)?;
 
+    let state = Oracle {
+        pyth_contract_addr: deps.api.addr_validate(msg.pyth_contract_addr.as_ref())?,
+        price_feed_id: msg.price_feed_id,
+    };
+    ORACLE.save(deps.storage, &state)?;
+
     // Increment the ID counter for the next account
     current_id += Uint128::new(1);
     ID_COUNTER.save(deps.storage, &current_id)?;
@@ -49,7 +60,8 @@ pub fn instantiate(
     Ok(Response::new()
         .add_attribute("method", "instantiate")
         .add_attribute("owner", info.sender)
-        .add_attribute("id", account.id.to_string()))
+        .add_attribute("id", account.id.to_string())
+        .add_attribute("price_id", format!("{}", msg.price_feed_id)))
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -641,18 +653,65 @@ pub mod execute {
 
 
 #[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::GetCount {} => to_json_binary(&query::count(deps)?),
+        QueryMsg::FetchPrice {} => to_json_binary(&query::query_fetch_price(deps, env)?),
+        QueryMsg::FetchUpdateFee { vaas } => to_json_binary(&query::query_fetch_update_fee(deps, vaas)?),
+        QueryMsg::FetchValidTimePeriod =>to_json_binary(&query::query_fetch_valid_time_period(deps)?),
     }
 }
 
 pub mod query {
     use super::*;
 
-    pub fn count(deps: Deps) -> StdResult<GetCountResponse> {
-        let state = STATE.load(deps.storage)?;
-        Ok(GetCountResponse { count: state.count })
+    
+
+    pub fn query_fetch_price(deps: Deps, env: Env) -> StdResult<FetchPriceResponse> {
+        let oracle = ORACLE.load(deps.storage)?;
+    
+        // query_price_feed is the standard way to read the current price from a Pyth price feed.
+        // It takes the address of the Pyth contract (which is fixed for each network) and the id of the
+        // price feed. The result is a PriceFeed object with fields for the current price and other
+        // useful information. The function will fail if the contract address or price feed id are
+        // invalid.
+        let price_feed_response: PriceFeedResponse =
+            query_price_feed(&deps.querier, oracle.pyth_contract_addr, oracle.price_feed_id)?;
+        let price_feed = price_feed_response.price_feed;
+    
+        // Get the current price and confidence interval from the price feed.
+        // This function returns None if the price is not currently available.
+        // This condition can happen for various reasons. For example, some products only trade at
+        // specific times, or network outages may prevent the price feed from updating.
+        //
+        // The example code below throws an error if the price is not available. It is recommended that
+        // you handle this scenario more carefully. Consult the [consumer best practices](https://docs.pyth.network/documentation/pythnet-price-feeds/best-practices)
+        // for recommendations.
+        let current_price = price_feed
+            .get_price_no_older_than(env.block.time.seconds() as i64, 60)
+            .ok_or_else(|| StdError::not_found("Current price is not available"))?;
+    
+        // Get an exponentially-weighted moving average price and confidence interval.
+        // The same notes about availability apply to this price.
+        let ema_price = price_feed
+            .get_ema_price_no_older_than(env.block.time.seconds() as i64, 60)
+            .ok_or_else(|| StdError::not_found("EMA price is not available"))?;
+    
+        Ok(FetchPriceResponse {
+            current_price,
+            ema_price,
+        })
+    }
+    
+    pub fn query_fetch_update_fee(deps: Deps, vaas: Vec<Binary>) -> StdResult<Coin> {
+        let oracle = ORACLE.load(deps.storage)?;
+        let coin = get_update_fee(&deps.querier, oracle.pyth_contract_addr, vaas.as_slice())?;
+        Ok(coin)
+    }
+    
+    pub fn query_fetch_valid_time_period(deps: Deps) -> StdResult<Duration> {
+        let oracle = ORACLE.load(deps.storage)?;
+        let duration = get_valid_time_period(&deps.querier, oracle.pyth_contract_addr)?;
+        Ok(duration)
     }
 }
 
