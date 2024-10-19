@@ -19,19 +19,26 @@ pub enum ExecuteMsg {
     Deposit {
         token_address: String,
         amount: Uint128,
+        account_id: Uint128,
     },
     Withdraw {
         token_address: String,
         amount: Uint128,
+        account_id: Uint128,
+
     },
     Borrow {
         borrow_token_address: String,
         amount: Uint128,
         collateral_token_address: String,
+        account_id: Uint128,
+
     },
     Repay {
         token_address: String,
         amount: Uint128,
+        account_id: Uint128,
+
     },
     // Liquidate {
     //     borrower: String,
