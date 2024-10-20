@@ -1,11 +1,11 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Decimal, StdError, Coin};
+use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Decimal, StdError, Coin, WasmMsg};
 use cw2::set_contract_version;
 use cw_storage_plus::{Item};
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg,InstantiateMsg};
-use crate::state::{Account, ACCOUNT_STORAGE,  ACCOUNTS};
+use crate::msg::{ExecuteMsg,InstantiateMsg, QueryMsg};
+use crate::state::{Account, ACCOUNT_STORAGE,  ACCOUNTS, ORACLE_ADDRESS};
 
 use std::time::Duration;
 
@@ -342,6 +342,48 @@ pub mod execute {
     }
 }
 
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn query(
+    deps : DepsMut,
+    _env: Env,
+    info : MessageInfo,
+    msg : QueryMsg
+) -> Result<Response, ContractError> {
+    match msg {
+        QueryMsg::GetOraclePrice { token_main, token_ref} => {
+            query::get_oracle_price(deps, _env, info, token_main, token_ref)
+        }
+    }
+}
+
+pub mod query {
+    use super::*;
+
+    pub fn get_oracle_price(
+        deps: DepsMut, 
+        env: Env, 
+        info: MessageInfo,
+        token_main: String,
+        token_ref : String
+    ) -> Result<Response, ContractError> {
+    
+        let oracle_msg = to_json_binary(&GetReferenceData{
+            symbol_pair : (token_main, token_ref)
+        })?;
+    
+        let msg = WasmMsg::Execute {
+            contract_addr: ORACLE_ADDRESS.to_string(),
+            msg: oracle_msg,
+            funds: vec![]
+        };
+    
+        Ok(Response::new()
+        .add_attribute("action", "get_oracle_price")
+        .add_message(msg)
+        )
+    }
+}
+
 
 
 #[cfg(test)]
@@ -359,18 +401,8 @@ mod tests {
     use cosmwasm_std::{from_binary, coins, Timestamp, Addr, SystemError, WasmQuery,SystemResult, QuerierResult, OwnedDeps};
     use crate::state::{Account, ACCOUNTS, ACCOUNT_STORAGE};
     use crate::contract::{instantiate, execute};
-    use pyth_sdk_cw::{
-        testing::MockPyth,
-        Price,
-        PriceFeed,
-        PriceIdentifier,
-        UnixTimestamp,
-    };
+  
 
-
-    const PYTH_CONTRACT_ADDR: &str = "pyth_contract_addr";
-    // For real deployments, see list of price feed ids here https://pyth.network/developers/price-feed-ids
-    const PRICE_ID: &str = "63f341689d98a12ef60a5cff1d7f85c70a9e17bf1575f0e7c0b2512d48b1c8b3";
     
 
     #[test]

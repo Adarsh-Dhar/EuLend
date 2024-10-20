@@ -34,28 +34,15 @@ pub enum ExecuteMsg {
         account_id: Uint128,
 
     },
-    // Liquidate {
-    //     borrower: String,
-    //     debt_token: String,
-    //     collateral_token: String,
-    // },
-    // Transfer {
-    //     to_address: String,
-    //     amount: Uint128,
-    // },
-    // AddLiquidity {
-    //     token1: String,
-    //     token2: String,
-    //     amount1: Uint128,
-    //     amount2: Uint128,
-    // },
-    // CreateLendingPool { 
-    //     params: LendingPoolParams 
-    // },
-    // UpdatePrice { 
-    //     token_address: String, 
-    //     new_price: Uint128
-    // },
+    
+}
+
+#[cw_serde]
+pub enum QueryMsg {
+    GetOraclePrice {
+        token_main: String,
+        token_ref: String,
+    },
 }
 
 

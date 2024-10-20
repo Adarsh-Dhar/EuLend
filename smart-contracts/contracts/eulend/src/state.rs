@@ -31,3 +31,4 @@ pub const ACCOUNT_STORAGE: AccountStorage = AccountStorage {
 };
 
 pub const ACCOUNTS: Map<&str, Account> = Map::new("accounts");
+pub const ORACLE_ADDRESS: &str = "archway1909sv5amdvv5knskc2lmxetue3u3wyv8hzqcfdmw4jnkzryrllaqzydthg" ;
