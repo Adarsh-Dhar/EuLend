@@ -51,7 +51,6 @@ cw-storage-plus = "1.1.0"
 cw2 = "1.1.0"
 cw20 = "1.1.0"
 hyper = "1.4.1"
-pyth-sdk-cw = "1.2.0"
 reqwest = "0.12.8"
 schemars = "0.8.12"
 serde = { version = "1.0.183", default-features = false, features = ["derive"] }

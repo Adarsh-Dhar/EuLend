@@ -4,12 +4,9 @@ use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Resp
 use cw2::set_contract_version;
 use cw_storage_plus::{Item};
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg,InstantiateMsg, QueryMsg, FetchPriceResponse};
-use crate::state::{Account, ACCOUNT,ACCOUNT_STORAGE, Oracle, ORACLE, ACCOUNTS};
-use pyth_sdk_cw::{ get_update_fee,
-get_valid_time_period,
-    query_price_feed,
-    PriceFeedResponse,};
+use crate::msg::{ExecuteMsg,InstantiateMsg};
+use crate::state::{Account, ACCOUNT_STORAGE,  ACCOUNTS};
+
 use std::time::Duration;
 
 // version info for migration info
@@ -47,11 +44,7 @@ pub fn instantiate(
     // Save the new account
     ACCOUNTS.save(deps.storage,&account_key, &account)?;
 
-    let oracle = Oracle {
-        pyth_contract_addr: deps.api.addr_validate(msg.pyth_contract_addr.as_ref())?,
-        price_feed_id: msg.price_feed_id,
-    };
-    ORACLE.save(deps.storage, &oracle)?;
+    
 
     // Increment the ID counter for the next account
     current_id += Uint128::new(1);
@@ -65,7 +58,7 @@ pub fn instantiate(
         .add_attribute("method", "instantiate")
         .add_attribute("owner", info.sender)
         .add_attribute("id", account.id.to_string())
-        .add_attribute("price_id", format!("{}", msg.price_feed_id)))
+    )
 }
 
 #[cfg_attr(not(feature = "library"), entry_point)]
@@ -347,61 +340,9 @@ pub mod execute {
             .add_attribute("token", token_address)
             .add_attribute("amount", amount.to_string()))
     }
-    
-   
-
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    match msg {
-        QueryMsg::FetchPrice {} => to_json_binary(&query::query_fetch_price(deps, env)?),
-        QueryMsg::FetchUpdateFee { vaas } => to_json_binary(&query::query_fetch_update_fee(deps, vaas)?),
-        QueryMsg::FetchValidTimePeriod =>to_json_binary(&query::query_fetch_valid_time_period(deps)?),
-    }
 }
 
-pub mod query {
-    use super::*;
 
-    
-
-    pub fn query_fetch_price(deps: Deps, env: Env) -> StdResult<FetchPriceResponse> {
-        let oracle = ORACLE.load(deps.storage)?;
-    
-       
-        let price_feed_response: PriceFeedResponse =
-            query_price_feed(&deps.querier, oracle.pyth_contract_addr, oracle.price_feed_id)?;
-        let price_feed = price_feed_response.price_feed;
-    
-  
-        // for recommendations.
-        let current_price = price_feed
-            .get_price_no_older_than(env.block.time.seconds() as i64, 60)
-            .ok_or_else(|| StdError::not_found("Current price is not available"))?;
-    
-        // Get an exponentially-weighted moving average price and confidence interval.
-        // The same notes about availability apply to this price.
-        let ema_price = price_feed
-            .get_ema_price_no_older_than(env.block.time.seconds() as i64, 60)
-            .ok_or_else(|| StdError::not_found("EMA price is not available"))?;
-    
-        Ok(FetchPriceResponse {
-            current_price,
-            ema_price,
-        })
-    }
-    
-    pub fn query_fetch_update_fee(deps: Deps, vaas: Vec<Binary>) -> StdResult<Coin> {
-        let oracle = ORACLE.load(deps.storage)?;
-        let coin = get_update_fee(&deps.querier, oracle.pyth_contract_addr, vaas.as_slice())?;
-        Ok(coin)
-    }
-    
-    pub fn query_fetch_valid_time_period(deps: Deps) -> StdResult<Duration> {
-        let oracle = ORACLE.load(deps.storage)?;
-        let duration = get_valid_time_period(&deps.querier, oracle.pyth_contract_addr)?;
-        Ok(duration)
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -416,7 +357,7 @@ mod tests {
         
     };
     use cosmwasm_std::{from_binary, coins, Timestamp, Addr, SystemError, WasmQuery,SystemResult, QuerierResult, OwnedDeps};
-    use crate::state::{Account, ACCOUNT, ACCOUNT_STORAGE};
+    use crate::state::{Account, ACCOUNTS, ACCOUNT_STORAGE};
     use crate::contract::{instantiate, execute};
     use pyth_sdk_cw::{
         testing::MockPyth,
@@ -457,11 +398,11 @@ fn test_instantiate() {
     assert_eq!(res.attributes[2], ("id", "0"));  // The first account should have ID 0
 
     // Query the state to verify that the account was created correctly
-    let account: Account = account.clone().unwrap().load(&deps.storage).unwrap();
-    assert_eq!(account.clone().unwrap().id, Uint128::new(0));
-    assert_eq!(account.clone().unwrap().balance, Uint128::new(0));
-    assert_eq!(account.clone().unwrap().debt, Uint128::new(0));
-    assert_eq!(account.clone().unwrap().owner, info.sender);
+    let account: Account = ACCOUNTS.load(deps.as_ref().storage, "0").unwrap();
+    assert_eq!(account.clone().id, Uint128::new(0));
+    assert_eq!(account.clone().balance, Uint128::new(0));
+    assert_eq!(account.clone().debt, Uint128::new(0));
+    assert_eq!(account.clone().owner, info.sender);
     // assert!(ACCOUNT_STORAGE.deposits(&deps.storage).is_empty());
     // assert!(ACCOUNT_STORAGE.borrows(&deps.storage).is_empty());
 
@@ -482,6 +423,7 @@ fn test_execute_deposit() {
         price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
     };
     let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+   
     
     // Create an account
     let account = Account {
@@ -492,17 +434,18 @@ fn test_execute_deposit() {
         
     };
 
-    if account.clone().unwrap().owner != info.sender {
+    if account.clone().owner != info.sender {
         panic!("Unauthorized");
     }
 
     // let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
-    account.clone().unwrap().save(deps.as_mut().storage, &account).unwrap();
+    ACCOUNTS.save(deps.as_mut().storage, "0", &account).unwrap();
 
     let msg = ExecuteMsg::Deposit {
         token_address: "native".to_string(),
         amount: Uint128::new(50),
+        account_id : Uint128::new(0),
     };
 
     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
@@ -515,8 +458,8 @@ fn test_execute_deposit() {
     assert_eq!(res.attributes[3], ("balance", "150"));
 
     // Check that balance is updated
-    let updated_account = account.clone().unwrap().load(&deps.storage).unwrap();
-    assert_eq!(updated_account.clone().unwrap().balance, Uint128::new(150));
+    let updated_account = ACCOUNTS.load(&deps.storage,"0").unwrap();
+    assert_eq!(updated_account.clone().balance, Uint128::new(150));
 }
 
 
@@ -540,17 +483,18 @@ fn test_execute_withdraw() {
         owner: info.sender.clone(),
     };
 
-    if account.clone().unwrap().owner != info.sender {
+    if account.clone().owner != info.sender {
         panic!("Unauthorized");
     }
 
     
 
-    account.clone().unwrap().save(deps.as_mut().storage, &account).unwrap();
+    ACCOUNTS.save(deps.as_mut().storage,"0", &account).unwrap();
 
     let msg = ExecuteMsg::Withdraw {
         token_address: "native".to_string(),
         amount: Uint128::new(50),
+        account_id : Uint128::new(0),
     };
 
     
@@ -566,8 +510,8 @@ fn test_execute_withdraw() {
     assert_eq!(res.attributes[3], ("balance", "150"));
 
     // Check that balance is updated
-    let updated_account = account.clone().unwrap().load(&deps.storage).unwrap();
-    assert_eq!(updated_account.clone().unwrap().balance, Uint128::new(150));
+    let updated_account = ACCOUNTS.load(&deps.storage, "0").unwrap();
+    assert_eq!(updated_account.clone().balance, Uint128::new(150));
 }
 
 #[test]
@@ -593,13 +537,14 @@ fn test_execute_borrow() {
         
     };
 
-    account.clone().unwrap().save(mut_deps.storage, &account).unwrap();
+    ACCOUNTS.save(mut_deps.storage,"0", &account).unwrap();
 
 
     let msg = ExecuteMsg::Borrow {
         borrow_token_address: borrow_token_address.clone(),
         amount: amount.clone(),
         collateral_token_address: "native_collateral".to_string(),
+        account_id : Uint128::new(0),
     };
 
 
@@ -626,9 +571,9 @@ fn test_execute_borrow() {
 
 
 
-    // // Check that balance is updated
-    // let updated_account = account.clone().unwrap().load(&deps.storage).unwrap();
-    // assert_eq!(updated_account.clone().unwrap().balance, 150.0);
+    // Check that balance is updated
+    let updated_account = ACCOUNTS.load(&deps.storage, "0").unwrap();
+    assert_eq!(updated_account.clone().balance, Uint128::new(375));
 }
 
 
@@ -655,12 +600,13 @@ fn test_execute_repay() {
         
     };
 
-    account.clone().unwrap().save(mut_deps.storage, &account).unwrap();
+    ACCOUNTS.save(mut_deps.storage,"0", &account).unwrap();
 
 
     let msg = ExecuteMsg::Repay {
         token_address: token_address.clone(),
         amount: amount.clone(),
+        account_id : Uint128::new(0),
         
     };
 
@@ -684,119 +630,5 @@ fn test_execute_repay() {
 
 }
 
-fn oracle_default_state() -> Oracle {
-    Oracle {
-        pyth_contract_addr: Addr::unchecked(PYTH_CONTRACT_ADDR),
-        price_feed_id:      PriceIdentifier::from_hex(PRICE_ID).unwrap(),
-    }
-}
 
-fn oracle_setup_test(
-    oracle: &Oracle,
-    mock_pyth: &MockPyth,
-    block_timestamp: UnixTimestamp,
-) -> (OwnedDeps<MockStorage, MockApi, MockQuerier>, Env) {
-    let mut dependencies = mock_dependencies();
-
-    let mock_pyth_copy = (*mock_pyth).clone();
-    dependencies
-        .querier
-        .update_wasm(move |x| handle_wasm_query(&mock_pyth_copy, x));
-
-    ORACLE.save(dependencies.as_mut().storage, oracle).unwrap();
-
-    let mut env = mock_env();
-    env.block.time = Timestamp::from_seconds(u64::try_from(block_timestamp).unwrap());
-
-    (dependencies, env)
-}
-
-fn handle_wasm_query(pyth: &MockPyth, wasm_query: &WasmQuery) -> QuerierResult {
-    match wasm_query {
-        WasmQuery::Smart { contract_addr, msg } if *contract_addr == PYTH_CONTRACT_ADDR => {
-            pyth.handle_wasm_query(msg)
-        }
-        WasmQuery::Smart { contract_addr, .. } => {
-            SystemResult::Err(SystemError::NoSuchContract {
-                addr: contract_addr.clone(),
-            })
-        }
-        WasmQuery::Raw { contract_addr, .. } => {
-            SystemResult::Err(SystemError::NoSuchContract {
-                addr: contract_addr.clone(),
-            })
-        }
-        WasmQuery::ContractInfo { contract_addr, .. } => {
-            SystemResult::Err(SystemError::NoSuchContract {
-                addr: contract_addr.clone(),
-            })
-        }
-        _ => unreachable!(),
-    }
-}
-
-#[test]
-fn test_get_price() {
-    // Arbitrary unix timestamp to coordinate the price feed timestamp and the block time.
-    let current_unix_time = 10_000_000;
-
-    let mut mock_pyth = MockPyth::new(Duration::from_secs(60), Coin::new(1, "foo"), &[]);
-    let price_feed = PriceFeed::new(
-        PriceIdentifier::from_hex(PRICE_ID).unwrap(),
-        Price {
-            price:        100,
-            conf:         10,
-            expo:         -1,
-            publish_time: current_unix_time,
-        },
-        Price {
-            price:        200,
-            conf:         20,
-            expo:         -1,
-            publish_time: current_unix_time,
-        },
-    );
-
-    mock_pyth.add_feed(price_feed);
-
-    let (deps, env) = oracle_setup_test(&oracle_default_state(), &mock_pyth, current_unix_time);
-
-    let msg = QueryMsg::FetchPrice {};
-    let result = query(deps.as_ref(), env, msg)
-        .and_then(|binary| from_binary::<FetchPriceResponse>(&binary));
-
-    assert_eq!(result.map(|r| r.current_price.price), Ok(100));
-}
-
-#[test]
-fn test_query_fetch_valid_time_period() {
-    // Arbitrary unix timestamp to coordinate the price feed timestamp and the block time.
-    let current_unix_time = 10_000_000;
-
-    let mock_pyth = MockPyth::new(Duration::from_secs(60), Coin::new(1, "foo"), &[]);
-    let (deps, env) = oracle_setup_test(&oracle_default_state(), &mock_pyth, current_unix_time);
-
-    let msg = QueryMsg::FetchValidTimePeriod {};
-    let result =
-        query(deps.as_ref(), env, msg).and_then(|binary| from_binary::<Duration>(&binary));
-
-    assert_eq!(result.map(|r| r.as_secs()), Ok(60));
-}
-
-#[test]
-fn test_query_fetch_update_fee() {
-    // Arbitrary unix timestamp to coordinate the price feed timestamp and the block time.
-    let current_unix_time = 10_000_000;
-
-    let mock_pyth = MockPyth::new(Duration::from_secs(60), Coin::new(1, "foo"), &[]);
-    let (deps, env) = oracle_setup_test(&oracle_default_state(), &mock_pyth, current_unix_time);
-
-    let msg = QueryMsg::FetchUpdateFee {
-        vaas: vec![Binary(vec![1, 2, 3])],
-    };
-    let result = query(deps.as_ref(), env, msg).and_then(|binary| from_binary::<Coin>(&binary));
-    assert_eq!(result.map(|r| r.to_string()), Ok(String::from("1foo")))
-}
-
-}
 }
