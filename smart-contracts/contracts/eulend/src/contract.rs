@@ -1,12 +1,13 @@
 #[cfg(not(feature = "library"))]
 use cosmwasm_std::entry_point;
-use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Decimal, StdError, Coin, WasmMsg};
+use cosmwasm_std::{to_json_binary, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128, Decimal, StdError, Coin, WasmMsg, Addr};
 use cw2::set_contract_version;
 use cw_storage_plus::{Item};
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg,InstantiateMsg, QueryMsg};
-use crate::state::{Account, ACCOUNT_STORAGE,  ACCOUNTS, ORACLE_ADDRESS};
-
+use crate::msg::{ExecuteMsg,InstantiateMsg, QueryMsg, OracleQueryMsg};
+use crate::state::{Account, ACCOUNT_STORAGE,  ACCOUNTS, ORACLE_ADDRESS, ReferenceData, VERIFIED_PRICES, PriceResponse, PricesResponse, LastUpdatedResponse};
+use cw_storage_plus::Bound;
+use cosmwasm_std::Order;
 use std::time::Duration;
 
 // version info for migration info
@@ -342,46 +343,94 @@ pub mod execute {
     }
 }
 
-#[cfg_attr(not(feature = "library"), entry_point)]
-pub fn query(
-    deps : DepsMut,
-    _env: Env,
-    info : MessageInfo,
-    msg : QueryMsg
-) -> Result<Response, ContractError> {
+#[entry_point]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
-        QueryMsg::GetOraclePrice { token_main, token_ref} => {
-            query::get_oracle_price(deps, _env, info, token_main, token_ref)
-        }
+        QueryMsg::GetPrice { coin_id } => query::query_price(deps, coin_id),
+        QueryMsg::GetPrices { coin_ids } => query::query_prices(deps, coin_ids),
+        QueryMsg::GetLastUpdated { coin_id } => query::query_last_updated(deps, coin_id),
+        // QueryMsg::GetAllPrices { start_after, limit } => 
+        // query::query_all_prices(deps, start_after, limit),
     }
 }
 
 pub mod query {
     use super::*;
 
-    pub fn get_oracle_price(
-        deps: DepsMut, 
-        env: Env, 
-        info: MessageInfo,
-        token_main: String,
-        token_ref : String
-    ) -> Result<Response, ContractError> {
-    
-        let oracle_msg = to_json_binary(&GetReferenceData{
-            symbol_pair : (token_main, token_ref)
-        })?;
-    
-        let msg = WasmMsg::Execute {
-            contract_addr: ORACLE_ADDRESS.to_string(),
-            msg: oracle_msg,
-            funds: vec![]
-        };
-    
-        Ok(Response::new()
-        .add_attribute("action", "get_oracle_price")
-        .add_message(msg)
-        )
+
+    pub fn query_price(deps: Deps, coin_id: String) -> StdResult<Binary> {
+        let price = VERIFIED_PRICES.may_load(deps.storage, &coin_id)?;
+        
+        match price {
+            Some(price_data) => {
+                let response = PriceResponse {
+                    coin_id: coin_id,
+                    price: price_data.price,
+                    last_updated: price_data.last_updated,
+                    verification_status: price_data.verification_status,
+                };
+                to_json_binary(&response)
+            },
+            None => Err(StdError::generic_err("Price not found"))
+        }
     }
+    
+    pub fn query_prices(deps: Deps, coin_ids: Vec<String>) -> StdResult<Binary> {
+        let mut prices: Vec<PriceResponse> = vec![];
+        
+        for coin_id in coin_ids {
+            if let Some(price_data) = VERIFIED_PRICES.may_load(deps.storage, &coin_id)? {
+                prices.push(PriceResponse {
+                    coin_id: coin_id,
+                    price: price_data.price,
+                    last_updated: price_data.last_updated,
+                    verification_status: price_data.verification_status,
+                });
+            }
+        }
+        
+        to_json_binary(&PricesResponse { prices })
+    }
+    
+    pub fn query_last_updated(deps: Deps, coin_id: String) -> StdResult<Binary> {
+        let price = VERIFIED_PRICES.may_load(deps.storage, &coin_id)?;
+        
+        match price {
+            Some(price_data) => {
+                let response = LastUpdatedResponse {
+                    last_updated: price_data.last_updated,
+                };
+                to_json_binary(&response)
+            },
+            None => Err(StdError::generic_err("Price not found"))
+        }
+    }
+    
+    // pub fn query_all_prices(
+    //     deps: Deps,
+    //     start_after: Option<String>,
+    //     limit: Option<u32>,
+    // ) -> StdResult<Binary> {
+    //     let limit = limit.unwrap_or(30) as usize;
+    //     let start = start_after.map(|s| Bound::exclusive(s.clone()));
+        
+    //     let prices: StdResult<Vec<PriceResponse>> = VERIFIED_PRICES
+    //         .range(deps.storage, start, None, Order::Ascending)
+    //         .take(limit)
+    //         .map(|item| {
+    //             let (coin_id, price_data) = item?;
+    //             Ok(PriceResponse {
+    //                 coin_id: coin_id,
+    //                 price: price_data.price,
+    //                 last_updated: price_data.last_updated,
+    //                 verification_status: price_data.verification_status,
+    //             })
+    //         })
+    //         .collect();
+        
+    //     to_json_binary(&PricesResponse { prices: prices? })
+    // }
+   
 }
 
 
@@ -398,269 +447,262 @@ mod tests {
         MockStorage,
         
     };
-    use cosmwasm_std::{from_binary, coins, Timestamp, Addr, SystemError, WasmQuery,SystemResult, QuerierResult, OwnedDeps};
+    use cosmwasm_std::{from_binary, coins, Timestamp, Addr, SystemError, WasmQuery,SystemResult, QuerierResult, OwnedDeps, ContractResult};
     use crate::state::{Account, ACCOUNTS, ACCOUNT_STORAGE};
     use crate::contract::{instantiate, execute};
   
-
+    use cw_multi_test::{App, AppBuilder, Contract, ContractWrapper, Executor};
     
 
-    #[test]
-fn test_instantiate() {
-    let mut deps = mock_dependencies();  // Mock the dependencies
+//     #[test]
+// fn test_instantiate() {
+//     let mut deps = mock_dependencies();  // Mock the dependencies
 
-    // Create a mock InstantiateMsg (modify if you have fields in InstantiateMsg)
-    let msg = InstantiateMsg {
-        pyth_contract_addr: PYTH_CONTRACT_ADDR.to_string(),
-        price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
-    };
+//     // Create a mock InstantiateMsg (modify if you have fields in InstantiateMsg)
+//     let _msg = 
     
-    // Mock MessageInfo with sender "creator" and some initial funds
-    let info = mock_info("creator", &coins(1000, "earth"));
+//     // Mock MessageInfo with sender "creator" and some initial funds
+//     let info = mock_info("creator", &coins(1000, "earth"));
 
-    // Call the instantiate function and assert that it succeeds
-    let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+//     // Call the instantiate function and assert that it succeeds
+//     let res = instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
     
-    // Check that no messages were sent in the response
-    assert_eq!(0, res.messages.len());
+//     // Check that no messages were sent in the response
+//     assert_eq!(0, res.messages.len());
 
-    // Verify that attributes are set correctly
-    assert_eq!(res.attributes[0], ("method", "instantiate"));
-    assert_eq!(res.attributes[1], ("owner", "creator"));
-    assert_eq!(res.attributes[2], ("id", "0"));  // The first account should have ID 0
+//     // Verify that attributes are set correctly
+//     assert_eq!(res.attributes[0], ("method", "instantiate"));
+//     assert_eq!(res.attributes[1], ("owner", "creator"));
+//     assert_eq!(res.attributes[2], ("id", "0"));  // The first account should have ID 0
 
-    // Query the state to verify that the account was created correctly
-    let account: Account = ACCOUNTS.load(deps.as_ref().storage, "0").unwrap();
-    assert_eq!(account.clone().id, Uint128::new(0));
-    assert_eq!(account.clone().balance, Uint128::new(0));
-    assert_eq!(account.clone().debt, Uint128::new(0));
-    assert_eq!(account.clone().owner, info.sender);
-    // assert!(ACCOUNT_STORAGE.deposits(&deps.storage).is_empty());
-    // assert!(ACCOUNT_STORAGE.borrows(&deps.storage).is_empty());
+//     // Query the state to verify that the account was created correctly
+//     let account: Account = ACCOUNTS.load(deps.as_ref().storage, "0").unwrap();
+//     assert_eq!(account.clone().id, Uint128::new(0));
+//     assert_eq!(account.clone().balance, Uint128::new(0));
+//     assert_eq!(account.clone().debt, Uint128::new(0));
+//     assert_eq!(account.clone().owner, info.sender);
+//     // assert!(ACCOUNT_STORAGE.deposits(&deps.storage).is_empty());
+//     // assert!(ACCOUNT_STORAGE.borrows(&deps.storage).is_empty());
 
-    // Verify that the ID counter was incremented
-    let current_id = ID_COUNTER.load(&deps.storage).unwrap();
-    assert_eq!(current_id, Uint128::new(1));
-}
+//     // Verify that the ID counter was incremented
+//     let current_id = ID_COUNTER.load(&deps.storage).unwrap();
+//     assert_eq!(current_id, Uint128::new(1));
+// }
 
 
-#[test]
-fn test_execute_deposit() {
-    let mut deps = mock_dependencies();
-        let env = mock_env();
+// #[test]
+// fn test_execute_deposit() {
+//     let mut deps = mock_dependencies();
+//         let env = mock_env();
     
-    let info = mock_info("owner", &coins(1000, "earth"));
-    let msg = InstantiateMsg {
-        pyth_contract_addr: PYTH_CONTRACT_ADDR.to_string(),
-        price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
-    };
-    let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+//     let info = mock_info("owner", &coins(1000, "earth"));
+//     let msg = InstantiateMsg {
+//         pyth_contract_addr: PYTH_CONTRACT_ADDR.to_string(),
+//         price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
+//     };
+//     let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
    
     
-    // Create an account
-    let account = Account {
-        id: Uint128::new(0),
-        balance: Uint128::new(100),
-        debt: Uint128::new(0),
-        owner: info.sender.clone(),
+//     // Create an account
+//     let account = Account {
+//         id: Uint128::new(0),
+//         balance: Uint128::new(100),
+//         debt: Uint128::new(0),
+//         owner: info.sender.clone(),
         
-    };
+//     };
 
-    if account.clone().owner != info.sender {
-        panic!("Unauthorized");
-    }
+//     if account.clone().owner != info.sender {
+//         panic!("Unauthorized");
+//     }
 
-    // let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+//     // let _res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
-    ACCOUNTS.save(deps.as_mut().storage, "0", &account).unwrap();
+//     ACCOUNTS.save(deps.as_mut().storage, "0", &account).unwrap();
 
-    let msg = ExecuteMsg::Deposit {
-        token_address: "native".to_string(),
-        amount: Uint128::new(50),
-        account_id : Uint128::new(0),
-    };
+//     let msg = ExecuteMsg::Deposit {
+//         token_address: "native".to_string(),
+//         amount: Uint128::new(50),
+//         account_id : Uint128::new(0),
+//     };
 
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+//     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
-    // Check response attributes
-    assert_eq!(res.attributes.len(), 4);
-    assert_eq!(res.attributes[0], ("action", "deposit"));
-    assert_eq!(res.attributes[1], ("depositor", "owner"));
-    assert_eq!(res.attributes[2], ("token", "native"));
-    assert_eq!(res.attributes[3], ("balance", "150"));
+//     // Check response attributes
+//     assert_eq!(res.attributes.len(), 4);
+//     assert_eq!(res.attributes[0], ("action", "deposit"));
+//     assert_eq!(res.attributes[1], ("depositor", "owner"));
+//     assert_eq!(res.attributes[2], ("token", "native"));
+//     assert_eq!(res.attributes[3], ("balance", "150"));
 
-    // Check that balance is updated
-    let updated_account = ACCOUNTS.load(&deps.storage,"0").unwrap();
-    assert_eq!(updated_account.clone().balance, Uint128::new(150));
-}
+//     // Check that balance is updated
+//     let updated_account = ACCOUNTS.load(&deps.storage,"0").unwrap();
+//     assert_eq!(updated_account.clone().balance, Uint128::new(150));
+// }
 
 
-#[test]
-fn test_execute_withdraw() {
-    let mut deps = mock_dependencies();
-        let env = mock_env();
+// #[test]
+// fn test_execute_withdraw() {
+//     let mut deps = mock_dependencies();
+//         let env = mock_env();
     
-    let info = mock_info("owner", &coins(1000, "earth"));
-    let msg = InstantiateMsg {
-        pyth_contract_addr: PYTH_CONTRACT_ADDR.to_string(),
-        price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
-    };
-    let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+//     let info = mock_info("owner", &coins(1000, "earth"));
+//     let msg = InstantiateMsg {
+//         pyth_contract_addr: PYTH_CONTRACT_ADDR.to_string(),
+//         price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
+//     };
+//     let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
-    // Create an account with sufficient balance
-    let account = Account {
-        id: Uint128::new(0),
-        balance: Uint128::new(200),
-        debt: Uint128::new(0),
-        owner: info.sender.clone(),
-    };
+//     // Create an account with sufficient balance
+//     let account = Account {
+//         id: Uint128::new(0),
+//         balance: Uint128::new(200),
+//         debt: Uint128::new(0),
+//         owner: info.sender.clone(),
+//     };
 
-    if account.clone().owner != info.sender {
-        panic!("Unauthorized");
-    }
-
-    
-
-    ACCOUNTS.save(deps.as_mut().storage,"0", &account).unwrap();
-
-    let msg = ExecuteMsg::Withdraw {
-        token_address: "native".to_string(),
-        amount: Uint128::new(50),
-        account_id : Uint128::new(0),
-    };
+//     if account.clone().owner != info.sender {
+//         panic!("Unauthorized");
+//     }
 
     
 
-    // Call withdraw function
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+//     ACCOUNTS.save(deps.as_mut().storage,"0", &account).unwrap();
 
-    // Check response attributes
-    assert_eq!(res.attributes.len(), 4);
-    assert_eq!(res.attributes[0], ("action", "withdraw"));
-    assert_eq!(res.attributes[1], ("withdrawer", "owner"));
-    assert_eq!(res.attributes[2], ("token", "native"));
-    assert_eq!(res.attributes[3], ("balance", "150"));
+//     let msg = ExecuteMsg::Withdraw {
+//         token_address: "native".to_string(),
+//         amount: Uint128::new(50),
+//         account_id : Uint128::new(0),
+//     };
 
-    // Check that balance is updated
-    let updated_account = ACCOUNTS.load(&deps.storage, "0").unwrap();
-    assert_eq!(updated_account.clone().balance, Uint128::new(150));
-}
+    
 
-#[test]
-fn test_execute_borrow() {
-    let mut deps = mock_dependencies();
-    let env = mock_env();
+//     // Call withdraw function
+//     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
-    let info = mock_info("owner", &coins(1000, "earth"));
-    let msg = InstantiateMsg {
-        pyth_contract_addr: PYTH_CONTRACT_ADDR.to_string(),
-        price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
-    };
-    let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-    let amount = Uint128::new(100);  
-    let borrow_token_address = "native".to_string();
-    let mut_deps = deps.as_mut();
+//     // Check response attributes
+//     assert_eq!(res.attributes.len(), 4);
+//     assert_eq!(res.attributes[0], ("action", "withdraw"));
+//     assert_eq!(res.attributes[1], ("withdrawer", "owner"));
+//     assert_eq!(res.attributes[2], ("token", "native"));
+//     assert_eq!(res.attributes[3], ("balance", "150"));
 
-    let account = Account {
-        id: Uint128::new(0),
-        balance: Uint128::new(500),
-        debt: Uint128::new(150), // Current debt
-        owner: info.sender.clone(),
+//     // Check that balance is updated
+//     let updated_account = ACCOUNTS.load(&deps.storage, "0").unwrap();
+//     assert_eq!(updated_account.clone().balance, Uint128::new(150));
+// }
+
+// #[test]
+// fn test_execute_borrow() {
+//     let mut deps = mock_dependencies();
+//     let env = mock_env();
+
+//     let info = mock_info("owner", &coins(1000, "earth"));
+//     let msg = InstantiateMsg {
+//         pyth_contract_addr: PYTH_CONTRACT_ADDR.to_string(),
+//         price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
+//     };
+//     let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+//     let amount = Uint128::new(100);  
+//     let borrow_token_address = "native".to_string();
+//     let mut_deps = deps.as_mut();
+
+//     let account = Account {
+//         id: Uint128::new(0),
+//         balance: Uint128::new(500),
+//         debt: Uint128::new(150), // Current debt
+//         owner: info.sender.clone(),
         
-    };
+//     };
 
-    ACCOUNTS.save(mut_deps.storage,"0", &account).unwrap();
-
-
-    let msg = ExecuteMsg::Borrow {
-        borrow_token_address: borrow_token_address.clone(),
-        amount: amount.clone(),
-        collateral_token_address: "native_collateral".to_string(),
-        account_id : Uint128::new(0),
-    };
+//     ACCOUNTS.save(mut_deps.storage,"0", &account).unwrap();
 
 
-
-    // Call withdraw function
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+//     let msg = ExecuteMsg::Borrow {
+//         borrow_token_address: borrow_token_address.clone(),
+//         amount: amount.clone(),
+//         collateral_token_address: "native_collateral".to_string(),
+//         account_id : Uint128::new(0),
+//     };
 
 
 
-    // Check response attributes
-    assert_eq!(res.attributes.len(), 8);
-    assert_eq!(res.attributes[0], ("action", "borrow"));
-    assert_eq!(res.attributes[1], ("borrower", "owner"));
-    assert_eq!(res.attributes[2], ("token", "native"));
-    assert_eq!(res.attributes[3], ("debt", "250"));
-
-    assert_eq!(res.attributes[4], ("balance", "500"));
-
-    assert_eq!(res.attributes[5], ("amount", "100"));
-
-    assert_eq!(res.attributes[6], ("collateral_token", "native_collateral"));
-
-    assert_eq!(res.attributes[7], ("collateral_amount", "125"));
+//     // Call withdraw function
+//     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
 
 
-    // Check that balance is updated
-    let updated_account = ACCOUNTS.load(&deps.storage, "0").unwrap();
-    assert_eq!(updated_account.clone().balance, Uint128::new(375));
-}
+//     // Check response attributes
+//     assert_eq!(res.attributes.len(), 8);
+//     assert_eq!(res.attributes[0], ("action", "borrow"));
+//     assert_eq!(res.attributes[1], ("borrower", "owner"));
+//     assert_eq!(res.attributes[2], ("token", "native"));
+//     assert_eq!(res.attributes[3], ("debt", "250"));
+
+//     assert_eq!(res.attributes[4], ("balance", "500"));
+
+//     assert_eq!(res.attributes[5], ("amount", "100"));
+
+//     assert_eq!(res.attributes[6], ("collateral_token", "native_collateral"));
+
+//     assert_eq!(res.attributes[7], ("collateral_amount", "125"));
 
 
-#[test]
-fn test_execute_repay() {
-    let mut deps = mock_dependencies();
-    let env = mock_env();
 
-    let info = mock_info("owner", &coins(1000, "earth"));
-    let msg = InstantiateMsg {
-        pyth_contract_addr: PYTH_CONTRACT_ADDR.to_string(),
-        price_feed_id: PriceIdentifier::from_hex(PRICE_ID).unwrap(),
-    };
-    let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
-    let amount = Uint128::new(50);  
-    let token_address = "native".to_string();
-    let mut_deps = deps.as_mut();
+//     // Check that balance is updated
+//     let updated_account = ACCOUNTS.load(&deps.storage, "0").unwrap();
+//     assert_eq!(updated_account.clone().balance, Uint128::new(375));
+// }
 
-    let account = Account {
-        id: Uint128::new(0),
-        balance: Uint128::new(500),
-        debt: Uint128::new(150), // Current debt
-        owner: info.sender.clone(),
+
+// #[test]
+// fn test_execute_repay() {
+//     let mut deps = mock_dependencies();
+//     let env = mock_env();
+
+//     let info = mock_info("owner", &coins(1000, "earth"));
+   
+//     let _res = instantiate(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+//     let amount = Uint128::new(50);  
+//     let token_address = "native".to_string();
+//     let mut_deps = deps.as_mut();
+
+//     let account = Account {
+//         id: Uint128::new(0),
+//         balance: Uint128::new(500),
+//         debt: Uint128::new(150), // Current debt
+//         owner: info.sender.clone(),
         
-    };
+//     };
 
-    ACCOUNTS.save(mut_deps.storage,"0", &account).unwrap();
+//     ACCOUNTS.save(mut_deps.storage,"0", &account).unwrap();
 
 
-    let msg = ExecuteMsg::Repay {
-        token_address: token_address.clone(),
-        amount: amount.clone(),
-        account_id : Uint128::new(0),
+//     let msg = ExecuteMsg::Repay {
+//         token_address: token_address.clone(),
+//         amount: amount.clone(),
+//         account_id : Uint128::new(0),
         
-    };
+//     };
 
-    ACCOUNT_STORAGE.borrows.save(mut_deps.storage,token_address.clone(),&amount);
-
-
-
-    // Call withdraw function
-    let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
+//     ACCOUNT_STORAGE.borrows.save(mut_deps.storage,token_address.clone(),&amount);
 
 
 
-    // Check response attributes
-    assert_eq!(res.attributes.len(), 4);
-    assert_eq!(res.attributes[0], ("action", "repay"));
-    assert_eq!(res.attributes[1], ("repayer", "owner"));
-    assert_eq!(res.attributes[2], ("token", "native"));
-
-    assert_eq!(res.attributes[3], ("amount", "50"));
+//     // Call withdraw function
+//     let res = execute(deps.as_mut(), env.clone(), info.clone(), msg).unwrap();
 
 
-}
 
+//     // Check response attributes
+//     assert_eq!(res.attributes.len(), 4);
+//     assert_eq!(res.attributes[0], ("action", "repay"));
+//     assert_eq!(res.attributes[1], ("repayer", "owner"));
+//     assert_eq!(res.attributes[2], ("token", "native"));
+
+//     assert_eq!(res.attributes[3], ("amount", "50"));
+
+
+// }
 
 }

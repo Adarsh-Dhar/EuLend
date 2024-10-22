@@ -37,11 +37,28 @@ pub enum ExecuteMsg {
     
 }
 
+
 #[cw_serde]
 pub enum QueryMsg {
-    GetOraclePrice {
-        token_main: String,
-        token_ref: String,
+    GetPrice { 
+        coin_id: String 
+    },
+    GetPrices { 
+        coin_ids: Vec<String> 
+    },
+    GetLastUpdated { 
+        coin_id: String 
+    },
+    // GetAllPrices {
+    //     start_after: Option<String>,
+    //     limit: Option<u32>,
+    // },
+}
+
+#[cw_serde]
+pub enum OracleQueryMsg {
+    GetReferenceData {
+        symbol_pair: (String, String),
     },
 }
 
