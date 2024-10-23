@@ -1,0 +1,17 @@
+{
+  "name": "trying",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@archwayhq/arch3.js": "^0.7.3",
+    "dotenv": "^16.4.5",
+    "long": "^5.2.3"
+  }
+}
