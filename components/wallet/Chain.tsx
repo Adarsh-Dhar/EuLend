@@ -18,6 +18,28 @@ export type ChainSelectProps = {
   onChange?: (chainName?: string) => void;
 };
 
+function ChainOption({ logo, label }: { logo: string; label: string }) {
+  return (
+    <Stack
+      direction="horizontal"
+      space="$4"
+      attributes={{ alignItems: 'center' }}
+    >
+      <Avatar
+        name={label}
+        getInitials={(name) => name[0]}
+        size="xs"
+        src={logo}
+        fallbackMode="bg"
+      />
+      <Text fontSize="$md" fontWeight="$normal" color="$text">
+        {label}
+      </Text>
+    </Stack>
+  );
+}
+
+
 export function ChainSelect({
   chainName,
   chains = [],
@@ -40,6 +62,9 @@ export function ChainSelect({
     () =>
       matchSorter(
         chains
+          .filter((chain) => 
+            ['Nibiru', 'Archway Testnet', 'Coreum', 'Neutron Testnet', 'Injective', 'Stargaze Testnet'].includes(chain.pretty_name)
+          )
           .map((chain) => ({
             logo: chain.logo_URIs?.png || chain.logo_URIs?.svg || '',
             value: chain.chain_name,
@@ -51,6 +76,7 @@ export function ChainSelect({
       ),
     [chains, input]
   );
+  
 
   useEffect(() => {
     if (!chainName) setValue(undefined);
@@ -69,8 +95,6 @@ export function ChainSelect({
 
   return (
     <ThemeProvider>
-          {/* @ts-ignore */}
-
       <Box
         display="flex"
         justifyContent="center"
@@ -85,12 +109,10 @@ export function ChainSelect({
             if (!input) setValue(undefined);
           }}
           onSelectionChange={(value) => {
-            const name = value as string;
-            if (name) {
-              setValue(name);
-              if (cache[name]) {
-                onChange(cache[name].chain_name);
-              }
+            const selectedChain = cache[value as string];
+            if (selectedChain) {
+              setValue(selectedChain.chain_name);
+              onChange(selectedChain.chain_name); // Only calls onChange with a valid chain name
             }
           }}
           inputAddonStart={
@@ -105,9 +127,7 @@ export function ChainSelect({
                   paddingX: '$4',
                 }}
               />
-              
             ) : (
-              // @ts-ignore
               <Box
                 display="flex"
                 justifyContent="center"
@@ -127,35 +147,11 @@ export function ChainSelect({
         >
           {options.map((option) => (
             <Combobox.Item key={option.value} textValue={option.label}>
-          {/* @ts-ignore */}
-
               <ChainOption logo={option.logo ?? ''} label={option.label} />
             </Combobox.Item>
           ))}
         </Combobox>
       </Box>
     </ThemeProvider>
-  );
-}
-
-function ChainOption({ logo, label }: { logo: string; label: string }) {
-  return (
-    <Stack
-      direction="horizontal"
-      space="$4"
-      attributes={{ alignItems: 'center' }}
-    >
-      <Avatar
-        name={label}
-        getInitials={(name) => name[0]}
-        size="xs"
-        src={logo}
-        fallbackMode="bg"
-      />
-
-      <Text fontSize="$md" fontWeight="$normal" color="$text">
-        {label}
-      </Text>
-    </Stack>
   );
 }

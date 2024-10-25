@@ -23,13 +23,20 @@
       "@/*": [
         "*"
       ]
-    }
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
-    "**/*.tsx"
-, "components/wallet/Wallet.jsx"  ],
+    "**/*.tsx",
+    "components/wallet/Wallet.jsx",
+    ".next/types/**/*.ts"
+  ],
   "exclude": [
     "node_modules"
   ]

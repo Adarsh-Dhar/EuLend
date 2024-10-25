@@ -6,18 +6,18 @@ import Link from 'next/link';
 const Header: React.FC = () => {
   return (
     <header className="bg-gray-800 p-4 shadow-md">
-      <nav className="flex justify-around">
-        <Link href="/deposit">
-          <a className="text-white text-lg hover:underline">Deposit</a>
+      <nav className="flex justify-end space-x-6 pr-8 mt-4">
+        <Link href="/Deposit" className="text-white text-lg hover:underline">
+          Deposit
         </Link>
-        <Link href="/withdraw">
-          <a className="text-white text-lg hover:underline">Withdraw</a>
+        <Link href="/Withdraw" className="text-white text-lg hover:underline">
+          Withdraw
         </Link>
-        <Link href="/borrow">
-          <a className="text-white text-lg hover:underline">Borrow</a>
+        <Link href="/Borrow" className="text-white text-lg hover:underline">
+          Borrow
         </Link>
-        <Link href="/repay">
-          <a className="text-white text-lg hover:underline">Repay</a>
+        <Link href="/Repay" className="text-white text-lg hover:underline">
+          Repay
         </Link>
       </nav>
     </header>
