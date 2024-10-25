@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Layout, Wallet } from "@/components";
-import { CHAIN_NAME } from "@/frontend/config";
+import { Wallet } from "../wallet";
+import { CHAIN_NAME } from "../config";
+import {Layout} from "../components/Layout";
 
 export default function Home() {
   const [chainName, setChainName] = useState(CHAIN_NAME);
