@@ -3,9 +3,13 @@ const { SigningArchwayClient } = require('@archwayhq/arch3.js');
 const { DirectSecp256k1HdWallet } = require("@cosmjs/proto-signing"); 
 const Long = require("long");
 dotenv.config();
+const {fetchAndUpdatePrice} = require('./oracle.js');
 
 
 async function main() {
+    const oracleMsg = await fetchAndUpdatePrice("ethereum");
+    const oracleMemo = oracleMsg.update_price.price.toString();
+    console.log("oracle msg", oracleMemo);
     const network = {  
         chainId: 'constantine-3',  
         endpoint: 'https://rpc.constantine.archway.io',  
@@ -13,8 +17,6 @@ async function main() {
     };
 
     const mnemonic = "test barely daughter cotton echo brain penalty price hood bargain venture mix ostrich obscure supreme fee roast expire arch fiscal govern term fantasy mesh";
-
-    console.log("mnemonic", mnemonic);
     const wallet = await DirectSecp256k1HdWallet.fromMnemonic(mnemonic, { prefix: network.prefix });
     const accounts = await wallet.getAccounts();
 
@@ -33,12 +35,13 @@ console.log("Cosmos Address:", destinationAddress); // Add this
             sourceChannel: 'channel-225', // updated to active channel for Osmosis    
             token: {      
                 denom: 'aconst',     
-                amount: '1000000000000000000'    
+                amount: '10000000000'    
             },   
             sender: accountAddress,    
             receiver: destinationAddress,    
             // Timeout is in nanoseconds, you can also just send Long.UZERO for default timeout    
             timeoutTimestamp: Long.fromNumber(Date.now() + 600_000).multiply(1_000_000), 
+            oracleMsg : oracleMsg.update_price.price 
          },
     };
     
@@ -48,7 +51,7 @@ console.log("Cosmos Address:", destinationAddress); // Add this
              accountAddress,  
              [msgIBCTransfer],  
              'auto',  
-             'IBC Transfer', // optional memo
+             oracleMemo, // optional memo
         );
 
         if (broadcastResult.code !== undefined && broadcastResult.code !== 0) { 
