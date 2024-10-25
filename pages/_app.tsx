@@ -11,10 +11,8 @@ import {
   useColorModeValue,
   useTheme,
 } from '@interchain-ui/react';
-import Header from "../components/frontend-components/Headers"
-import CreateAccount from '@/components/frontend-components/CreateAccount';
-import Borrow from '@/components/frontend-components/Borrow';
-import Repay from '@/components/frontend-components/Repay';
+
+import Execute from '@/components/frontend-components/Execute';
 
 function CreateCosmosApp({ Component, pageProps }: AppProps) {
   const { themeClass } = useTheme();
@@ -27,8 +25,8 @@ function CreateCosmosApp({ Component, pageProps }: AppProps) {
 
   return (
     <ThemeProvider>
-      <Header />
-      <ChainProvider
+
+      {/* <ChainProvider
       //@ts-ignore
         chains={chains}
         assetLists={assets}
@@ -50,22 +48,23 @@ function CreateCosmosApp({ Component, pageProps }: AppProps) {
       >
           {/* @ts-ignore */}
 
-        <Box
+        {/* <Box
           className={themeClass}
           minHeight="100dvh"
           backgroundColor={useColorModeValue('$white', '$background')}
         >
           {/* @ts-ignore */}
-          <Component {...pageProps} />
+          {/* <Component {...pageProps} /> */}
+         
 
+
+        {/* </Box>
+      </ChainProvider>  */}
+
+        <Box>
+        <Execute />
 
         </Box>
-      </ChainProvider>
-
-      <CreateAccount />
-      <Borrow />
-      <Repay />
-
     </ThemeProvider>
   );
 }
