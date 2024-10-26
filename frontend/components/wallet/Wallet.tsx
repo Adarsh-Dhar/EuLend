@@ -11,7 +11,7 @@ import { chains } from "chain-registry";
 import { User } from "./User";
 import { Warning } from "./Warning";
 import { ChainSelect } from "./Chain";
-import { CHAIN_NAME, CHAIN_NAME_STORAGE_KEY } from "@/frontend/config";
+import { CHAIN_NAME, CHAIN_NAME_STORAGE_KEY } from "@/config";
 import {
   ButtonConnect,
   ButtonConnected,
@@ -43,19 +43,12 @@ export function Wallet({
   } = useChain(chainName);
 
   const ConnectButton = {
-    // @ts-ignore
     [WalletStatus.Connected]: <ButtonConnected onClick={openView} />,
-    // @ts-ignore
     [WalletStatus.Connecting]: <ButtonConnecting />,
-    // @ts-ignore
     [WalletStatus.Disconnected]: <ButtonDisconnected onClick={connect} />,
-    // @ts-ignore
     [WalletStatus.Error]: <ButtonError onClick={openView} />,
-    // @ts-ignore
     [WalletStatus.Rejected]: <ButtonRejected onClick={connect} />,
-    // @ts-ignore
     [WalletStatus.NotExist]: <ButtonNotExist onClick={openView} />,
-    // @ts-ignore
   }[status] || <ButtonConnect onClick={connect} />;
 
   function handleChainChange(chainName?: string) {
@@ -73,13 +66,8 @@ export function Wallet({
   }, []);
 
   return (
-    // @ts-ignore
     <Box py="$16">
-          {/* @ts-ignore */}
-
       <Box mx="auto" maxWidth="28rem" attributes={{ mb: "$12" }}>
-          {/* @ts-ignore */}
-
         <ChainSelect
           chains={chains}
           chainName={chain.chain_name}
@@ -102,14 +90,10 @@ export function Wallet({
           ),
         }}
       >
-          {/* @ts-ignore */}
-
         {username ? <User name={username} /> : null}
         {address
           ? <ClipboardCopyText text={address} truncate="middle" />
           : null}
-          {/* @ts-ignore */}
-
         <Box
           my="$8"
           flex="1"
@@ -125,7 +109,6 @@ export function Wallet({
 
         {message &&
             [WalletStatus.Error, WalletStatus.Rejected].includes(status)
-            // @ts-ignore
           ? <Warning text={`${wallet?.prettyName}: ${message}`} />
           : null}
       </Stack>

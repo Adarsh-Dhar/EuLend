@@ -12,8 +12,6 @@ import {
   useTheme,
 } from '@interchain-ui/react';
 
-import Execute from '@/components/Execute';
-
 function CreateCosmosApp({ Component, pageProps }: AppProps) {
   const { themeClass } = useTheme();
 
@@ -25,9 +23,7 @@ function CreateCosmosApp({ Component, pageProps }: AppProps) {
 
   return (
     <ThemeProvider>
-
-      {/* <ChainProvider
-      //@ts-ignore
+      <ChainProvider
         chains={chains}
         assetLists={assets}
         wallets={wallets}
@@ -46,25 +42,15 @@ function CreateCosmosApp({ Component, pageProps }: AppProps) {
         // @ts-ignore
         signerOptions={signerOptions}
       >
-          {/* @ts-ignore */}
-
-        {/* <Box
+        <Box
           className={themeClass}
           minHeight="100dvh"
           backgroundColor={useColorModeValue('$white', '$background')}
         >
           {/* @ts-ignore */}
-          {/* <Component {...pageProps} /> */}
-         
-
-
-        {/* </Box>
-      </ChainProvider>  */}
-
-        <Box>
-        <Execute />
-
+          <Component {...pageProps} />
         </Box>
+      </ChainProvider>
     </ThemeProvider>
   );
 }
