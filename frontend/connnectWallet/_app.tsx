@@ -12,7 +12,7 @@ import {
   useTheme,
 } from '@interchain-ui/react';
 
-import Execute from '@/components/frontend-components/Execute';
+import Execute from '@/components/Execute';
 
 function CreateCosmosApp({ Component, pageProps }: AppProps) {
   const { themeClass } = useTheme();
