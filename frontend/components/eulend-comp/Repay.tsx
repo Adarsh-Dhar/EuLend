@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { assets } from 'chain-registry';
 import { OverviewTransfer, AvailableItem, OverviewTransferProps, Box } from '@interchain-ui/react';
 
-const symbols = ['ATOM', 'JUNO', 'STARS', 'BLD', 'STRD', 'CRO', 'AKT', 'MARS'];
+const symbols = ['STARS','ARCH', 'NIBI','COREUM', 'INJ', 'NTRN'];
 
 const dropdownList = symbols.map((symbol) => {
   const asset = assets.find((assetList) => assetList.assets[0].symbol === symbol)!.assets[0];
@@ -17,7 +17,7 @@ const dropdownList = symbols.map((symbol) => {
   } as AvailableItem;
 });
 
-function Demo() {
+function Repay() {
   const [selected, setSelected] = useState<AvailableItem>(dropdownList[0]);
 
   const onChange: OverviewTransferProps['onChange'] = (selectedItem, value) => {
@@ -44,3 +44,5 @@ function Demo() {
     </Box>
   );
 }
+
+export default Repay;

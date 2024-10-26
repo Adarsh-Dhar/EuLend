@@ -11,6 +11,8 @@ import {
   useColorModeValue,
   useTheme,
 } from '@interchain-ui/react';
+import Borrow from '@/components/eulend-comp/Borrow';
+import Repay from '@/components/eulend-comp/Repay';
 
 function CreateCosmosApp({ Component, pageProps }: AppProps) {
   const { themeClass } = useTheme();
@@ -49,8 +51,12 @@ function CreateCosmosApp({ Component, pageProps }: AppProps) {
         >
           {/* @ts-ignore */}
           <Component {...pageProps} />
+          <Borrow />
+      <Repay />
         </Box>
+        
       </ChainProvider>
+      
     </ThemeProvider>
   );
 }
