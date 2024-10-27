@@ -1,6 +1,7 @@
 // components/Navbar.tsx
+"use client"
 import Link from "next/link";
-import Button from "./Button";
+import  ConnectWallet  from "./ConnectWallet";
 
 const Navbar: React.FC = () => {
   return (
@@ -14,7 +15,7 @@ const Navbar: React.FC = () => {
           <Link href="/repay" className="text-gray-300 hover:text-white transition">
             Repay
           </Link>
-          <Button />
+          <ConnectWallet />
         </div>
       </div>
     </nav>
