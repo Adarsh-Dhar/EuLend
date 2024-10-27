@@ -64,4 +64,3 @@ async function fetchAndUpdatePrice(token) {
 
 
 module.exports = { fetchAndUpdatePrice };
-fetchAndUpdatePrice("injective-protocol");

@@ -1,8 +1,7 @@
 "use client"
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
-import { tokenAtom } from '@/states/tokenSelected';
-import { createStore} from 'jotai';
+import {useStore} from '../states/state';
 
 
 const ChainList = () => {
@@ -10,7 +9,9 @@ const ChainList = () => {
   const [value, setValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const dropdownRef = useRef(null);
-  const tokenSelected = createStore()
+
+  
+  
 
   
 
@@ -89,6 +90,11 @@ const ChainList = () => {
     token.chainId.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const updateToken = useStore((token) => token.changeToken)
+  const tokenSelected = useStore((token) => token.tokenSelected)
+  
+
+
   return (
 
              <div className="relative w-64" ref={dropdownRef}>
@@ -135,8 +141,10 @@ const ChainList = () => {
                     setValue(token.value === value ? "" : token.value);
                     setOpen(false);
                     setSearchTerm("");
-                    tokenSelected.set(tokenAtom, token.value)
-                    console.log("tokenSelected", tokenSelected.get(tokenAtom))
+                    updateToken(token.value);
+                    
+                    
+
                     // console.log(tokenSelected)
                   }}
                 >

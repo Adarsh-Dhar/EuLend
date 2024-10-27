@@ -1,8 +1,9 @@
 "use client"
 import React, { useState } from 'react';
 import ChainList from "./ChainList";
-import fetchAndUpdatePrice from "../scripts/oracle"
+import {fetchAndUpdatePrice} from "../scripts/oracle"
 import { RecoilRoot } from 'recoil';
+import { useStore } from '../states/state';
 
 const BorrowConfirmation = ({ amount, onClose }: { amount: number, onClose: () => void }) => (
   <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
@@ -33,10 +34,14 @@ const BorrowConfirmation = ({ amount, onClose }: { amount: number, onClose: () =
 );
 
 const Borrow = () => {
-  const [collateralAmount, setCollateralAmount] = useState("");
+  const [collateralAmount, setCollateralAmount] = useState(0);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  console.log("collateralAmount", collateralAmount);
+
+  const tokenSelected = useStore((state : any) => state.tokenSelected);
+  const priceCalaulated = useStore((state : any) => state.priceCalaulated);
+  const updatePrice = useStore((state : any) => state.changePrice);
+  console.log("priceCalaulated", priceCalaulated);
 
   const handleBorrow = async () => {
     try {
@@ -44,6 +49,15 @@ const Borrow = () => {
       // Here you would add your backend call to process the borrow
       // await borrowUSDC(collateralAmount);
       setShowConfirmation(true);
+      
+      // Call the fetchAndUpdatePrice function instead of assigning it to a variable
+      console.log("token selected", tokenSelected);
+      const price = await fetchAndUpdatePrice(tokenSelected);
+      //@ts-ignore
+      const finalPrice = price.update_price.price/1000000;
+      const amountTransfered = collateralAmount * finalPrice * 0.8;
+      updatePrice(amountTransfered);
+
     } catch (error) {
       console.error("Borrow failed:", error);
     } finally {
@@ -73,7 +87,7 @@ const Borrow = () => {
               type="number"
               placeholder="0.00"
               value={collateralAmount}
-              onChange={(e) => setCollateralAmount(e.target.value)}
+              onChange={(e) => setCollateralAmount(Number(e.target.value))}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
             />
           </div>
@@ -99,10 +113,10 @@ const Borrow = () => {
 
       {showConfirmation && (
         <BorrowConfirmation 
-          amount = {12}
+          amount = {priceCalaulated}
           onClose={() => {
             setShowConfirmation(false);
-            setCollateralAmount("");
+            setCollateralAmount(0);
           }}
         />
       )}
