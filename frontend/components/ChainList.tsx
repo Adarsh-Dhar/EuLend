@@ -1,61 +1,67 @@
 "use client"
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
+import { tokenAtom } from '@/states/tokenSelected';
+import { createStore} from 'jotai';
+
 
 const ChainList = () => {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const dropdownRef = useRef(null);
+  const tokenSelected = createStore()
+
+  
 
   const tokens = [
     {
       value: "archway",
       label: "ARCH",
       chainId: "constantine-3",
-      balance: "26471502",
+      euclid_balance: "26471502",
       icon: "🏛️"
     },
     {
       value: "coreum",
       label: "CORE",
       chainId: "coreum-testnet-1",
-      balance: "940757",
+      euclid_balance: "940757",
       icon: "💫"
     },
     {
-      value: "injective",
+      value: "injective-protocol",
       label: "INJ",
       chainId: "injective-888",
-      balance: "849417981",
+      euclid_balance: "849417981",
       icon: "📊"
     },
     {
       value: "neutron",
       label: "NTRN",
       chainId: "pion-1",
-      balance: "0",
+      euclid_balance: "0",
       icon: "⚛️"
     },
     {
       value: "nibiru",
       label: "NIBI",
       chainId: "nibiru-testnet-1",
-      balance: "23950952004",
+      euclid_balance: "23950952004",
       icon: "🌌"
     },
     {
       value: "stargaze",
       label: "STARS",
       chainId: "elgafar-1",
-      balance: "93464128623",
+      euclid_balance: "93464128623",
       icon: "⭐"
     }
   ];
 
-  // Format balance to be more readable
-  const formatBalance = (balance : any) => {
-    const num = parseInt(balance);
+  // Format euclid_balance to be more readable
+  const formateuclid_balance = (euclid_balance : any) => {
+    const num = parseInt(euclid_balance);
     if (num >= 1000000) {
       return `${(num / 1000000).toFixed(2)}M`;
     } else if (num >= 1000) {
@@ -84,7 +90,8 @@ const ChainList = () => {
   );
 
   return (
-    <div className="relative w-64" ref={dropdownRef}>
+
+             <div className="relative w-64" ref={dropdownRef}>
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between px-4 py-2 text-sm bg-white border rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -96,7 +103,7 @@ const ChainList = () => {
             </span>
             <span className="font-medium">{tokens.find(token => token.value === value)?.label}</span>
             <span className="text-gray-500 ml-2">
-              ({formatBalance(tokens.find(token => token.value === value)?.balance || "0")})
+              ({formateuclid_balance(tokens.find(token => token.value === value)?.euclid_balance || "0")})
             </span>
           </span>
         ) : (
@@ -128,6 +135,9 @@ const ChainList = () => {
                     setValue(token.value === value ? "" : token.value);
                     setOpen(false);
                     setSearchTerm("");
+                    tokenSelected.set(tokenAtom, token.value)
+                    console.log("tokenSelected", tokenSelected.get(tokenAtom))
+                    // console.log(tokenSelected)
                   }}
                 >
                   <div className="flex items-center">
@@ -139,7 +149,7 @@ const ChainList = () => {
                   </div>
                   <div className="flex flex-col items-end">
                     <span className="text-sm text-gray-500">
-                      {formatBalance(token.balance)}
+                      {formateuclid_balance(token.euclid_balance)}
                     </span>
                     <span className="text-xs text-gray-400">
                       {token.chainId}
@@ -152,6 +162,8 @@ const ChainList = () => {
         </div>
       )}
     </div>
+
+   
   );
 };
 

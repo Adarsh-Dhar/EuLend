@@ -1,6 +1,8 @@
 "use client"
 import React, { useState } from 'react';
 import ChainList from "./ChainList";
+import fetchAndUpdatePrice from "../scripts/oracle"
+import { RecoilRoot } from 'recoil';
 
 const BorrowConfirmation = ({ amount, onClose }: { amount: number, onClose: () => void }) => (
   <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
@@ -34,6 +36,7 @@ const Borrow = () => {
   const [collateralAmount, setCollateralAmount] = useState("");
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  console.log("collateralAmount", collateralAmount);
 
   const handleBorrow = async () => {
     try {
@@ -49,7 +52,8 @@ const Borrow = () => {
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-gray-50 p-4">
+    <RecoilRoot>
+        <div className="flex justify-center items-center min-h-screen bg-gray-50 p-4">
       <div className="w-full max-w-md bg-white rounded-xl shadow-lg p-6 space-y-6">
         <h2 className="text-2xl font-semibold text-gray-800">Borrow</h2>
         
@@ -95,7 +99,7 @@ const Borrow = () => {
 
       {showConfirmation && (
         <BorrowConfirmation 
-          amount = {Number(collateralAmount)}
+          amount = {12}
           onClose={() => {
             setShowConfirmation(false);
             setCollateralAmount("");
@@ -103,6 +107,8 @@ const Borrow = () => {
         />
       )}
     </div>
+    </RecoilRoot>
+    
   );
 };
 
