@@ -3,8 +3,14 @@ import Navbar from "@/components/Navbar";
 import ChainList from "@/components/ChainList";
 
 
+
 export default function Home() {
   return (
-    <Navbar />
+    <div>
+      <Navbar />
+      <ChainList />
+    </div>
+    
+
   );
 }
