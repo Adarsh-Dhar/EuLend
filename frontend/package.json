@@ -10,7 +10,11 @@
   },
   "dependencies": {
     "@archwayhq/arch3.js": "^0.7.3",
+    "@cosmos-kit/keplr": "^2.14.1",
+    "@cosmos-kit/react": "^2.20.1",
+    "@interchain-ui/react": "^1.25.6",
     "axios": "^1.7.7",
+    "chain-registry": "^1.69.12",
     "next": "15.0.1",
     "react": "19.0.0-rc-69d4b800-20241021",
     "react-dom": "19.0.0-rc-69d4b800-20241021"

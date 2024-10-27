@@ -1,8 +1,8 @@
 import Image from "next/image";
-import Navbar from "@/components/Navbar";
+import Repay from "@/components/Repay";
 
 export default function Home() {
   return (
-    <Navbar />
+    <div>repay</div>
   );
 }

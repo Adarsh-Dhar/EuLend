@@ -1,8 +1,8 @@
 import Image from "next/image";
-import Navbar from "@/components/Navbar";
+import Borrow from "@/components/Borrow";
 
 export default function Home() {
   return (
-    <Navbar />
+    <div>borrow</div>
   );
 }
