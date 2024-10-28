@@ -1,0 +1,172 @@
+{
+  "contract_name": "eulend",
+  "contract_version": "0.1.0",
+  "idl_version": "1.0.0",
+  "instantiate": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "InstantiateMsg",
+    "type": "object",
+    "required": [
+      "count"
+    ],
+    "properties": {
+      "count": {
+        "type": "number",
+        "format": "double"
+      }
+    },
+    "additionalProperties": false
+  },
+  "execute": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ExecuteMsg",
+    "oneOf": [
+      {
+        "type": "object",
+        "required": [
+          "deposit"
+        ],
+        "properties": {
+          "deposit": {
+            "type": "object",
+            "required": [
+              "amount",
+              "token_address"
+            ],
+            "properties": {
+              "amount": {
+                "type": "number",
+                "format": "double"
+              },
+              "token_address": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "withdraw"
+        ],
+        "properties": {
+          "withdraw": {
+            "type": "object",
+            "required": [
+              "amount",
+              "token_address"
+            ],
+            "properties": {
+              "amount": {
+                "type": "number",
+                "format": "double"
+              },
+              "token_address": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "borrow"
+        ],
+        "properties": {
+          "borrow": {
+            "type": "object",
+            "required": [
+              "amount",
+              "borrow_token_address",
+              "collateral_token_address"
+            ],
+            "properties": {
+              "amount": {
+                "type": "number",
+                "format": "double"
+              },
+              "borrow_token_address": {
+                "type": "string"
+              },
+              "collateral_token_address": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "required": [
+          "repay"
+        ],
+        "properties": {
+          "repay": {
+            "type": "object",
+            "required": [
+              "amount",
+              "token_address"
+            ],
+            "properties": {
+              "amount": {
+                "type": "number",
+                "format": "double"
+              },
+              "token_address": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    ]
+  },
+  "query": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "QueryMsg",
+    "oneOf": [
+      {
+        "type": "object",
+        "required": [
+          "get_count"
+        ],
+        "properties": {
+          "get_count": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    ]
+  },
+  "migrate": null,
+  "sudo": null,
+  "responses": {
+    "get_count": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "GetCountResponse",
+      "type": "object",
+      "required": [
+        "count"
+      ],
+      "properties": {
+        "count": {
+          "type": "number",
+          "format": "double"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

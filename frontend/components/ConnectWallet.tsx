@@ -1,6 +1,6 @@
 "use client"
 import { useState } from "react";
-
+import { useStore } from "../states/state";
 
 
 interface KeplrWindow {
@@ -17,10 +17,11 @@ declare global {
 }
 
 const WalletConnect = () => {
-  const [address, setAddress] = useState<string | null>(null);
+
   const [error, setError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
-
+  const userAddress = useStore((state) => state.address);
+  const updateAddress = useStore((state) => state.changeAddress);
 
 
   
@@ -51,7 +52,8 @@ const WalletConnect = () => {
         throw new Error("No accounts found");
       }
       
-      setAddress(accounts[0].address);
+      updateAddress(accounts[0].address);
+      console.log("user address", userAddress);
     } catch (err: any) {
       setError(err.message || "Failed to connect to wallet");
     } finally {
@@ -70,8 +72,8 @@ const WalletConnect = () => {
         <span className="relative px-5 py-2.5 transition-all ease-in duration-75 bg-white dark:bg-gray-900 rounded-md group-hover:bg-opacity-0">
           {isConnecting ? (
             "Connecting..."
-          ) : address ? (
-            truncateAddress(address)
+          ) : userAddress ? (
+            truncateAddress(userAddress)
           ) : (
             "Connect Wallet"
           )}
