@@ -15,4 +15,16 @@ pub enum ContractError {
 
     #[error("Token do not exist")]
     TokenNotFound {},
+
+    #[error("Account already exists")]
+    AccountExists{},
+
+    #[error("Insufficient collateral")]
+    InsufficientCollateral {},
+
+    #[error("No repayments needed")]
+    NoRepayment {},
+
+    #[error("Values donot match")]
+    MathError {},
 }

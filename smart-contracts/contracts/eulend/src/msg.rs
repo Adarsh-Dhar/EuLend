@@ -10,57 +10,20 @@ pub enum InstantiateMsg {}
 
 #[cw_serde]
 pub enum ExecuteMsg {
-    Deposit {
-        token_address: String,
-        amount: Uint128,
-        account_id: Uint128,
-    },
-    Withdraw {
-        token_address: String,
-        amount: Uint128,
-        account_id: Uint128,
-
-    },
-    Borrow {
-        borrow_token_address: String,
-        amount: Uint128,
-        collateral_token_address: String,
-        account_id: Uint128,
-
-    },
-    Repay {
-        token_address: String,
-        amount: Uint128,
-        account_id: Uint128,
-
-    },
+    CreateAccount {},
+    Borrow {borrow_amount: Uint128},
+    Repay {withdraw_denom: String, withdraw_amount: Uint128}
     
 }
 
 
 #[cw_serde]
 pub enum QueryMsg {
-    GetPrice { 
-        coin_id: String 
-    },
-    GetPrices { 
-        coin_ids: Vec<String> 
-    },
-    GetLastUpdated { 
-        coin_id: String 
-    },
-    // GetAllPrices {
-    //     start_after: Option<String>,
-    //     limit: Option<u32>,
-    // },
+    MaxWithdrawableAmount {token_denom : String},
+    GetAccount {address: String},
 }
 
-#[cw_serde]
-pub enum OracleQueryMsg {
-    GetReferenceData {
-        symbol_pair: (String, String),
-    },
-}
+
 
 
 
