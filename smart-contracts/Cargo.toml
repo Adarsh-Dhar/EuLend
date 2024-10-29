@@ -1,7 +1,6 @@
 [workspace]
 members = ["contracts/*"]
 
-
 [profile.release]
 opt-level = 3
 debug = false

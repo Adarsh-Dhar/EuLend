@@ -1,5 +1,5 @@
 # stable
-newline_style = "Unix"
+newline_style = "unix"
 hard_tabs = false
 tab_spaces = 4
 
