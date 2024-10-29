@@ -5,7 +5,7 @@ use std::time::Duration;
 
 
 #[cw_serde]
-pub enum InstantiateMsg {}
+pub struct InstantiateMsg {}
 
 
 #[cw_serde]

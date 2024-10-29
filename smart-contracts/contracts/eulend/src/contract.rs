@@ -207,3 +207,174 @@ fn get_collateral_value(deps: Deps, collateral: &Coin) -> Result<Uint128, Contra
 //         ACCOUNTS.load(deps.storage, &address)
 //     }
 // }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmwasm_std::testing::{
+        mock_dependencies, mock_env, mock_info,
+        MockApi, MockQuerier, MockStorage,
+    };
+    use cosmwasm_std::{coins, Addr, OwnedDeps};
+    use crate::msg::InstantiateMsg;
+
+    const ADDR1: &str = "addr1";
+    const ADDR2: &str = "addr2";
+
+    fn setup() -> OwnedDeps<MockStorage, MockApi, MockQuerier> {
+        let mut deps = mock_dependencies();
+        let msg = InstantiateMsg {};
+        let info = mock_info(ADDR1, &[]);
+        let env = mock_env();
+        
+        instantiate(deps.as_mut(), env, info, msg).unwrap();
+        deps
+    }
+
+    #[test]
+    fn test_instantiate() {
+        let mut deps = mock_dependencies();
+        let msg = InstantiateMsg {};
+        let info = mock_info(ADDR1, &[]);
+        let env = mock_env();
+
+        let res = instantiate(deps.as_mut(), env, info, msg).unwrap();
+        assert_eq!(1, res.attributes.len());
+        assert_eq!(("method", "instantiate"), res.attributes[0]);
+    }
+
+    #[test]
+    fn test_create_account() {
+        let mut deps = setup();
+        let info = mock_info(ADDR1, &[]);
+
+        // Test successful account creation
+        let res = execute::create_account(deps.as_mut(), info.clone()).unwrap();
+        assert_eq!(2, res.attributes.len());
+        assert_eq!(("method", "create_account"), res.attributes[0]);
+        assert_eq!(("address", ADDR1), res.attributes[1]);
+
+        // Test duplicate account creation
+        let err = execute::create_account(deps.as_mut(), info).unwrap_err();
+        match err {
+            ContractError::AccountExists {} => {}
+            e => panic!("unexpected error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn test_borrow() {
+        let mut deps = setup();
+        
+        // Create account first
+        let info = mock_info(ADDR1, &[]);
+        execute::create_account(deps.as_mut(), info.clone()).unwrap();
+
+        // Test successful borrow
+        let borrow_amount = Uint128::new(100);
+        let collateral_amount = Uint128::new(200);
+        let collateral_denom = "atom".to_string();
+        
+        let info = mock_info(
+            ADDR1,
+            &coins(200, "atom"), // Sending collateral
+        );
+        
+        let res = execute::borrow(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            borrow_amount,
+            collateral_denom.clone(),
+            collateral_amount,
+        ).unwrap();
+
+        // Verify response
+        assert_eq!(5, res.attributes.len());
+        assert_eq!(("method", "borrow"), res.attributes[0]);
+        assert_eq!(("borrower", ADDR1), res.attributes[1]);
+        assert_eq!(("collateral_denom", "atom"), res.attributes[2]);
+        assert_eq!(("collateral_amount", "200"), res.attributes[3]);
+        assert_eq!(("borrowed_amount", "100"), res.attributes[4]);
+
+        // Verify bank message
+        assert_eq!(1, res.messages.len());
+        match &res.messages[0].msg {
+            cosmwasm_std::CosmosMsg::Bank(BankMsg::Send { to_address, amount }) => {
+                assert_eq!(to_address, &ADDR1.to_string());
+                assert_eq!(
+                    amount,
+                    &vec![Coin {
+                        denom: "usdc".to_string(),
+                        amount: borrow_amount,
+                    }]
+                );
+            }
+            _ => panic!("unexpected message type"),
+        }
+    }
+
+    #[test]
+    fn test_repay() {
+        let mut deps = setup();
+        
+        // Setup: Create account and borrow first
+        let info = mock_info(ADDR1, &[]);
+        execute::create_account(deps.as_mut(), info.clone()).unwrap();
+        
+        let borrow_amount = Uint128::new(100);
+        let collateral_amount = Uint128::new(200);
+        let collateral_denom = "atom".to_string();
+        
+        let info = mock_info(
+            ADDR1,
+            &coins(200, "atom"),
+        );
+        
+        execute::borrow(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            borrow_amount,
+            collateral_denom.clone(),
+            collateral_amount,
+        ).unwrap();
+
+        // Test successful repayment
+        let repay_info = mock_info(
+            ADDR1,
+            &coins(100, "usdc"), // Repaying USDC
+        );
+        
+        let res = execute::repay(
+            deps.as_mut(),
+            mock_env(),
+            repay_info,
+            "atom".to_string(),
+            Uint128::new(200), // Withdrawing all collateral
+        ).unwrap();
+
+        // Verify response
+        assert_eq!(5, res.attributes.len());
+        assert_eq!(("method", "repay"), res.attributes[0]);
+        assert_eq!(("repayer", ADDR1), res.attributes[1]);
+        assert_eq!(("usdc_repaid", "100"), res.attributes[2]);
+        assert_eq!(("collateral_withdrawn", "atom"), res.attributes[3]);
+        assert_eq!(("withdrawal_amount", "200"), res.attributes[4]);
+
+        // Test repayment without sending USDC
+        let no_funds_info = mock_info(ADDR1, &[]);
+        let err = execute::repay(
+            deps.as_mut(),
+            mock_env(),
+            no_funds_info,
+            "atom".to_string(),
+            Uint128::new(200),
+        ).unwrap_err();
+        
+        match err {
+            ContractError::NoRepayment {} => {}
+            e => panic!("unexpected error: {:?}", e),
+        }
+    }
+}
