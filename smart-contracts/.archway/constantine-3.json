@@ -1,0 +1,30 @@
+{
+  "deployments": [
+    {
+      "action": "instantiate",
+      "txhash": "8DA7791114B634BAB17C1F63A9C7614E264C19005029235BD4ED5EFD714B94EE",
+      "wasm": {
+        "codeId": 3836
+      },
+      "contract": {
+        "name": "eulend",
+        "version": "0.1.0",
+        "address": "archway1z5krv4lgwh883fv840gupe4mtwjfnmfw0d86l9yrrlj7s4rj9hdsp8c87s",
+        "admin": "archway1t00mqwm46hmvkgj4ysyh0ykyjln3yw2fvt92wj"
+      },
+      "msg": {}
+    },
+    {
+      "action": "store",
+      "txhash": "514321E015DE6320AFDAE32FADEAC7DDBF5ABB3DB2BE4CAB57704E8CE24983AB",
+      "wasm": {
+        "codeId": 3836,
+        "checksum": "79498ac491b5f1043fb94f54be1fa08702b6db010ddd5e33b6f5eb6cc453cd80"
+      },
+      "contract": {
+        "name": "eulend",
+        "version": "0.1.0"
+      }
+    }
+  ]
+}
