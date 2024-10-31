@@ -8,9 +8,11 @@ const store = (set : any) => ({
     tokenSelected: '',
     priceCalaulated: 0,
     address : "",
+    offlineSigner : null,
     changeToken : (token : string) => set({tokenSelected: token}),
     changePrice : (price : number) => set({priceCalaulated: price}),
     changeAddress : (address : string) => set({address: address}),
+    changeOfflineSigner : (offlineSigner : any) => set({offlineSigner: offlineSigner}),
 })
 
 const log = (config : any) => (set : any, get : any, api : any) =>
