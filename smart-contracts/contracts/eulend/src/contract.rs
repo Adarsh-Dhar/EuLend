@@ -7,7 +7,7 @@ use cosmwasm_std::{
 use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use crate::error::ContractError;
-use crate::msg::{ExecuteMsg, InstantiateMsg};
+use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::state::{Account, ACCOUNTS, COLLATERAL};
 
 // version info for migration info
@@ -191,22 +191,31 @@ fn get_collateral_value(deps: Deps, collateral: &Coin) -> Result<Uint128, Contra
     Ok(collateral.amount)
 }
 
-// #[cfg_attr(not(feature = "library"), entry_point)]
-// pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
-//     match msg {
-//         QueryMsg::GetAccount { address } => {
-//             to_json_binary(&query::get_account(deps, address)?)
-//         },
-//     }
-// }
+#[cfg_attr(not(feature = "library"), entry_point)]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::GetAccount { address } => {
+            to_json_binary(&query::get_account(deps, address)?)
+        },
+        QueryMsg::MaxWithdrawableAmount { token_denom } => {
+            to_json_binary(&query::max_withdrawable_amount(deps, token_denom)?)
+        }
+    }
+}
 
-// pub mod query {
-//     use super::*;
+pub mod query {
+    use super::*;
 
-//     pub fn get_account(deps: Deps, address: String) -> StdResult<Account> {
-//         ACCOUNTS.load(deps.storage, &address)
-//     }
-// }
+    pub fn get_account(deps: Deps, address: String) -> StdResult<Account> {
+        ACCOUNTS.load(deps.storage, &address)
+    }
+
+    pub fn max_withdrawable_amount(deps: Deps, token_denom: String) -> StdResult<Uint128> {
+        let collateral = COLLATERAL.may_load(deps.storage, &token_denom)?
+            .unwrap_or(Uint128::zero());
+        Ok(collateral)
+    }
+}
 
 #[cfg(test)]
 mod tests {
