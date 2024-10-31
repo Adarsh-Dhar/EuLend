@@ -93,6 +93,79 @@ const WalletConnect = () => {
     }
   }
 
+  const borrow = async (borrowAmount: string, collateralDenom: string, collateralAmount: string, funds: any[]) => {
+    try {
+      if (!(await offlineSignerState) || !userAddress) {
+        throw new Error("Please connect wallet first");
+      }
+
+      const cwClient = await SigningArchwayClient.connectWithSigner(
+        "https://rpc.constantine.archway.io",
+        offlineSignerState
+      );
+
+      const accounts = await offlineSignerState.getAccounts();
+
+      const msg = {
+        borrow: {
+          borrow_amount: borrowAmount,
+          collateral_denom: collateralDenom,
+          collateral_amount: collateralAmount
+        }
+      };
+
+      const response = await cwClient.execute(
+        accounts[0].address,
+        contractAddress,
+        msg,
+        "auto",
+        undefined,
+        funds
+      );
+      console.log('Borrow Response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error borrowing:', error);
+      throw error;
+    }
+  }
+
+  const repay = async (withdrawDenom: string, withdrawAmount: string, repaymentFunds: any[]) => {
+    try {
+      if (!(await offlineSignerState) || !userAddress) {
+        throw new Error("Please connect wallet first");
+      }
+
+      const cwClient = await SigningArchwayClient.connectWithSigner(
+        "https://rpc.constantine.archway.io",
+        offlineSignerState
+      );
+
+      const accounts = await offlineSignerState.getAccounts();
+
+      const msg = {
+        repay: {
+          withdraw_denom: withdrawDenom,
+          withdraw_amount: withdrawAmount
+        }
+      };
+
+      const response = await cwClient.execute(
+        accounts[0].address,
+        contractAddress,
+        msg,
+        "auto",
+        undefined,
+        repaymentFunds
+      );
+      console.log('Repay Response:', response);
+      return response;
+    } catch (error) {
+      console.error('Error repaying:', error);
+      throw error;
+    }
+  }
+
   return (
 
       <div className="flex flex-col items-center gap-4">
