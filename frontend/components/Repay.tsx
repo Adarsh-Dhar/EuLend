@@ -1,6 +1,8 @@
 "use client"
 import React, { useState } from 'react';
 import ChainList from "./ChainList";
+import { repay } from '../interaction';
+import { useStore } from '../states/state';
 
 type RepayConfirmationProps = {
   amount: number;
@@ -70,6 +72,7 @@ const Repay = () => {
   const [showRepayConfirmation, setShowRepayConfirmation] = useState(false);
   const [showTransferConfirmation, setShowTransferConfirmation] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const tokenSelected = useStore((state) => state.tokenSelected);
 
   const handleInitialRepay = () => {
     setShowRepayConfirmation(true);
@@ -82,6 +85,8 @@ const Repay = () => {
       // await processRepay(usdcAmount, selectedToken);
       setShowRepayConfirmation(false);
       setShowTransferConfirmation(true);
+      
+      repay(tokenSelected, usdcAmount)
     } catch (error) {
       console.error("Repay failed:", error);
     } finally {

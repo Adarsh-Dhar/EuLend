@@ -4,6 +4,7 @@ import ChainList from "./ChainList";
 import {fetchAndUpdatePrice} from "../scripts/oracle"
 import { RecoilRoot } from 'recoil';
 import { useStore } from '../states/state';
+import {borrow} from "../interaction/index"
 
 const BorrowConfirmation = ({ amount, onClose }: { amount: number, onClose: () => void }) => (
   <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
@@ -42,6 +43,9 @@ const Borrow = () => {
   const priceCalaulated = useStore((state : any) => state.priceCalaulated);
   const updatePrice = useStore((state : any) => state.changePrice);
   console.log("priceCalaulated", priceCalaulated);
+  const offlineSignerState = useStore((state) => state.offlineSigner);
+  const userAddress = useStore((state) => state.address);
+
 
   const handleBorrow = async () => {
     try {
@@ -55,8 +59,8 @@ const Borrow = () => {
       const price = await fetchAndUpdatePrice(tokenSelected);
       //@ts-ignore
       const finalPrice = price.update_price.price/1000000;
-      const amountTransfered = collateralAmount * finalPrice * 0.8;
-      updatePrice(amountTransfered);
+      const borrow_amount = collateralAmount * finalPrice * 0.8;
+      updatePrice(borrow_amount);
 
     } catch (error) {
       console.error("Borrow failed:", error);

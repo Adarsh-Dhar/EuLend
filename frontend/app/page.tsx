@@ -1,6 +1,7 @@
 "use client"
 
 import Navbar from "@/components/Navbar";
+import CreateAccount from "@/components/CreateAccount";
 
 
 
@@ -12,7 +13,7 @@ export default function Home() {
     <div>
 
       <Navbar />
-
+      <CreateAccount />
 
 
     </div>
