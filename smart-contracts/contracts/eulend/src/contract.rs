@@ -8,7 +8,7 @@ use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{Account, ACCOUNTS, COLLATERAL, ESCROW, LIQUIDITY_PROVIDERS, LiquidityProvider};
+use crate::state::{Account, ACCOUNTS, COLLATERAL, ESCROW, LIQUIDITY_PROVIDERS, LiquidityProvider, Collateral};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:backend";
@@ -36,8 +36,8 @@ pub fn execute(
 ) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::CreateAccount {} => execute::create_account(deps, info),
-        ExecuteMsg::Borrow { borrow_amount,collateral_denom , collateral_amount} => {
-            execute::borrow(deps, env, info, borrow_amount, collateral_denom, collateral_amount)
+        ExecuteMsg::Borrow { borrow_amount,collateral_denom} => {
+            execute::borrow(deps, env, info, borrow_amount, collateral_denom)
         },
         ExecuteMsg::Repay { withdraw_denom, withdraw_amount } => {
             execute::repay(deps, env, info, withdraw_denom, withdraw_amount)
@@ -45,8 +45,8 @@ pub fn execute(
         ExecuteMsg::DeleteAccount {} => {
             execute::delete_account(deps, info)
         },
-        ExecuteMsg::ProvideLiquidity {liquidity_amount} => {
-            execute::provide_liquidity(deps, env, info, liquidity_amount)
+        ExecuteMsg::ProvideLiquidity {} => {
+            execute::provide_liquidity(deps, env, info)
         }
     }
 }
@@ -95,25 +95,30 @@ pub mod execute {
         info: MessageInfo,
         borrow_amount: Uint128,
         collateral_denom: String,
-        collateral_amount: Uint128,
+    
         
     ) -> Result<Response, ContractError> {
-        
+        //getting funds from user and checking if collateral denom is correct
         let info_funds = info.funds
             .iter()
             .find(|coin| coin.denom == collateral_denom) ;
             
-        
-        // Load or create account
+        //getting account with address from info
         let mut account = ACCOUNTS.may_load(deps.storage, &info.sender.to_string())?
             .unwrap();
-
+        //checking if account do not exist
         if account.borrowed_usdc == Uint128::zero() && account.address.is_empty() {
             return Err(ContractError::AccountDoesNotExist {});
         }
+        //entering values to the collateral struct
+        let collateral = Collateral {
+            address: info.sender.to_string(),
+            token_denom : collateral_denom.clone(),
+            amount : info_funds.unwrap().amount,
+        };
 
         // Save collateral
-        COLLATERAL.save(deps.storage, &collateral_denom, &collateral_amount)?;
+        COLLATERAL.save(deps.storage, &collateral)?;
             
         // Get current escrow balance
         let mut escrow = ESCROW ;
@@ -147,8 +152,8 @@ pub mod execute {
             .add_message(send_msg)
             .add_attribute("method", "borrow")
             .add_attribute("borrower", info.sender)
-            .add_attribute("collateral_denom", collateral_denom)
-            .add_attribute("collateral_amount", collateral_amount)
+            .add_attribute("collateral_denom", collateral_denom.clone())
+            .add_attribute("collateral_amount", info_funds.unwrap().amount)
             .add_attribute("borrowed_amount", borrow_amount))
     }
 
@@ -165,44 +170,33 @@ pub mod execute {
             .find(|coin| coin.denom == "usdc")
             .ok_or(ContractError::NoRepayment {})?;
             
-        // Load account
+        // Load account with address from info
         let mut account = ACCOUNTS.load(deps.storage, &info.sender.to_string())?;
 
+        //checking if account do not exist  
         if account.borrowed_usdc == Uint128::zero() && account.address.is_empty() {
             return Err(ContractError::AccountDoesNotExist {});
         }
         
         // Update borrowed amount
-        account.borrowed_usdc = account.borrowed_usdc.checked_sub(usdc_repaid.amount)
-            .map_err(|_| ContractError::NoRepayment {})?;
+        account.borrowed_usdc = account.borrowed_usdc - usdc_repaid.amount;
             
-        // // Verify and update collateral
-        let current_collateral = COLLATERAL.may_load(deps.storage, &withdraw_denom).unwrap(); 
-            
-            
-        // // Calculate remaining collateral value after withdrawal
-        let remaining_collateral = current_collateral ; 
-            
-            
-        // Verify remaining collateral is sufficient for remaining loan
-        let remaining_collateral_value = get_collateral_value(
-            deps.as_ref(),
-            &Coin {
-                denom: withdraw_denom.clone(),
-                amount: remaining_collateral.ok_or_else(|| ContractError::InsufficientFunds {})?,
-            },
-        )?;
+        // get current collateral value with address and denom
+        let mut current_collateral = COLLATERAL.load(deps.storage)?;
+        if current_collateral.address != info.sender.to_string() || current_collateral.token_denom != withdraw_denom {
+            return Err(ContractError::TokenNotFound {});
+        }
 
-        COLLATERAL.save(deps.storage, &withdraw_denom, &remaining_collateral_value)?;
-        
-        // if remaining_collateral_value < account.borrowed_usdc.checked_mul(COLLATERAL_RATIO)
-        //     .ok_or(ContractError::MathError {})? {
-        //     return Err(ContractError::InsufficientCollateral {});
-        // }
-        
-        // Update remaining collateral
-       
-        
+        //checking if withdraw amount is greater than current collateral
+        if withdraw_amount > current_collateral.amount {
+            return Err(ContractError::InsufficientFunds {});
+        }
+
+        //updating collateral amount
+        current_collateral.amount = current_collateral.amount - withdraw_amount;
+            
+        COLLATERAL.save(deps.storage, &current_collateral)?;
+    
         // Save updated account
         ACCOUNTS.save(deps.storage, &info.sender.to_string(), &account)?;
         
@@ -228,39 +222,25 @@ pub mod execute {
         deps: DepsMut,
         env: Env,
         info: MessageInfo,
-        liquidity_amount: Uint128,
     ) -> Result<Response, ContractError> {
-        // Check if funds were actually sent
-        if info.funds.is_empty() || info.funds[0].amount != liquidity_amount {
-            return Err(ContractError::InsufficientFunds {});
-        }
+        let liquidity_paid = info.funds
+        .iter()
+        .find(|coin| coin.denom == "usdc")
+        .ok_or(ContractError::WrongToken {})?;
+        
 
         // Create or update liquidity provider record
         let liquidity_provider = LiquidityProvider {
             address: info.sender.to_string(),
-            liquidity_amount,
+            liquidity_amount: liquidity_paid.amount,
         };
-        LIQUIDITY_PROVIDERS.save(deps.storage, &info.sender, &liquidity_provider)?;
+        LIQUIDITY_PROVIDERS.save(deps.storage, &liquidity_provider)?;
 
-        // Transfer funds to contract escrow
-        // let transfer_msg = BankMsg::Send {
-        //     to_address: env.contract.address.to_string(),
-        //     amount: vec![info.funds[0].clone()],
-        // };
-
-        let transfer_msg = BankMsg::Send {
-            to_address: env.contract.address.to_string(),
-            amount: vec![Coin {
-                denom: "usdc".to_string(),
-                amount: liquidity_amount,
-            }],
-        };
 
         Ok(Response::new()
-            .add_message(transfer_msg)
             .add_attribute("method", "provide_liquidity")
             .add_attribute("provider", info.sender)
-            .add_attribute("amount", liquidity_amount))
+            .add_attribute("amount", liquidity_paid.amount))
     }
 }
 

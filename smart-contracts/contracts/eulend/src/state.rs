@@ -16,9 +16,16 @@ pub struct LiquidityProvider {
 }
 
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Collateral {
+    pub address: String,
+    pub token_denom: String,
+    pub amount: Uint128,
+}
+
 
 // Collaterals by token denomination
-pub const COLLATERAL: Map<&str, Uint128> = Map::new("collateral");
+pub const COLLATERAL: Item<Collateral> = Item::new("collateral");
 pub const ACCOUNTS: Map<&str, Account> = Map::new("accounts");
-pub const ESCROW : Uint128 = Uint128::zero();
-pub const LIQUIDITY_PROVIDERS: Map<&Addr, LiquidityProvider> = Map::new("liquidity_providers");
+pub const ESCROW: Uint128 = Uint128::zero();
+pub const LIQUIDITY_PROVIDERS: Item<LiquidityProvider> = Item::new("liquidity_providers");

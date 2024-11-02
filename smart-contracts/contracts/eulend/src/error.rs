@@ -30,4 +30,7 @@ pub enum ContractError {
 
     #[error("Values donot match")]
     MathError {},
+
+    #[error("Wrong token")]
+    WrongToken {},
 }
