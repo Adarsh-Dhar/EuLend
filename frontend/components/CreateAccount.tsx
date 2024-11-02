@@ -1,7 +1,7 @@
 "use client"
 import React, { useState } from 'react';
 
-import { createAccount } from '../interaction';
+import { createAccount, deleteAccount } from '../interaction';
 
 
 const CreateAccount = () => {
@@ -13,6 +13,18 @@ const CreateAccount = () => {
       setIsProcessing(true);
       // Here you would add your backend call to create account
       await createAccount();
+    } catch (error) {
+      console.error("Account creation failed:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    try {
+      setIsProcessing(true);
+      // Here you would add your backend call to create account
+      await deleteAccount();
     } catch (error) {
       console.error("Account creation failed:", error);
     } finally {
@@ -40,6 +52,24 @@ const CreateAccount = () => {
               </span>
             ) : (
               'Create Account'
+            )}
+          </button>
+        </div>
+        <div className="space-y-4">
+          <button
+            onClick={handleDeleteAccount}
+            disabled={isProcessing}
+            className={`w-full py-3 px-4 rounded-lg text-white font-medium transition-colors
+              ${!isProcessing 
+                ? 'bg-blue-600 hover:bg-blue-700' 
+                : 'bg-gray-400 cursor-not-allowed'}`}
+          >
+            {isProcessing ? (
+              <span className="flex items-center justify-center">
+                Processing...
+              </span>
+            ) : (
+              'Delete Account'
             )}
           </button>
         </div>

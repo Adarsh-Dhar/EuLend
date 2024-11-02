@@ -1,7 +1,7 @@
 import { SigningArchwayClient } from "@archwayhq/arch3.js";
 import { useStore } from "../states/state";
 
-const contractAddress = 'archway1z5krv4lgwh883fv840gupe4mtwjfnmfw0d86l9yrrlj7s4rj9hdsp8c87s';
+const contractAddress = 'archway1j3700x5k5eygz93xdsmug90exya64ys64l56fq2exghnvut0cczqx0ryr4';
 
 
 
@@ -51,6 +51,41 @@ export const createAccount = async () => {
     return response;
   } catch (error) {
     console.error('Error creating account:', error);
+    throw error;
+  }
+}
+
+export const deleteAccount = async () => {
+  const offlineSigner = useStore.getState().offlineSigner;
+  const userAddress = useStore.getState().address;
+  console.log("offlineSigner", offlineSigner);
+  console.log("userAddress", userAddress);
+  try {
+    
+    if (!offlineSigner || !userAddress) {
+      throw new Error("Please connect wallet first");
+    }
+
+    const cwClient = await SigningArchwayClient.connectWithSigner(
+      "https://rpc.constantine.archway.io",
+      offlineSigner
+    );
+
+    console.log("userAddress", userAddress);
+    console.log("cwClient", cwClient);
+    const accounts = await offlineSigner.getAccounts();
+
+    const msg = { delete_account: {} };
+    const response = await cwClient.execute(
+        accounts[0].address,
+        contractAddress,
+        msg,
+        "auto"
+    );
+    console.log('Delete Account Response:', response);
+    return response;
+  } catch (error) {
+    console.error('Error deleting account:', error);
     throw error;
   }
 }
