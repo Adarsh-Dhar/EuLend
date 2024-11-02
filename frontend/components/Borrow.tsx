@@ -43,8 +43,7 @@ const Borrow = () => {
   const priceCalaulated = useStore((state : any) => state.priceCalaulated);
   const updatePrice = useStore((state : any) => state.changePrice);
   console.log("priceCalaulated", priceCalaulated);
-  const offlineSignerState = useStore((state) => state.offlineSigner);
-  const userAddress = useStore((state) => state.address);
+ 
 
 
   const handleBorrow = async () => {
@@ -61,6 +60,7 @@ const Borrow = () => {
       const finalPrice = price.update_price.price/1000000;
       const borrow_amount = collateralAmount * finalPrice * 0.8;
       updatePrice(borrow_amount);
+      borrow(borrow_amount, tokenSelected, collateralAmount)
 
     } catch (error) {
       console.error("Borrow failed:", error);

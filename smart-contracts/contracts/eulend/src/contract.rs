@@ -42,6 +42,9 @@ pub fn execute(
         ExecuteMsg::Repay { withdraw_denom, withdraw_amount } => {
             execute::repay(deps, env, info, withdraw_denom, withdraw_amount)
         },
+        ExecuteMsg::DeleteAccount {} => {
+            execute::delete_account(deps, info)
+        }
     }
 }
 
@@ -68,6 +71,19 @@ pub mod execute {
             .add_attribute("address", info.sender))
     }
 
+    pub fn delete_account(
+        deps: DepsMut,
+        info: MessageInfo,
+    ) -> Result<Response, ContractError> {
+        let account = ACCOUNTS.load(deps.storage, &info.sender.to_string()).unwrap();
+        if account.borrowed_usdc == Uint128::zero() && account.address.is_empty() {
+            return Err(ContractError::AccountDoesNotExist {});
+        }
+        
+        ACCOUNTS.remove(deps.storage, &info.sender.to_string());
+        Ok(Response::new().add_attribute("method", "delete_account"))
+    }
+
     pub fn borrow(
         deps: DepsMut,
         env: Env,
@@ -75,6 +91,7 @@ pub mod execute {
         borrow_amount: Uint128,
         collateral_denom: String,
         collateral_amount: Uint128,
+        
     ) -> Result<Response, ContractError> {
         
         let info_funds = info.funds
@@ -85,6 +102,10 @@ pub mod execute {
         // Load or create account
         let mut account = ACCOUNTS.may_load(deps.storage, &info.sender.to_string())?
             .unwrap();
+
+        if account.borrowed_usdc == Uint128::zero() && account.address.is_empty() {
+            return Err(ContractError::AccountDoesNotExist {});
+        }
 
         COLLATERAL.save(deps.storage, &collateral_denom, &collateral_amount)?;
             
@@ -130,6 +151,10 @@ pub mod execute {
             
         // Load account
         let mut account = ACCOUNTS.load(deps.storage, &info.sender.to_string())?;
+
+        if account.borrowed_usdc == Uint128::zero() && account.address.is_empty() {
+            return Err(ContractError::AccountDoesNotExist {});
+        }
         
         // Update borrowed amount
         account.borrowed_usdc = account.borrowed_usdc.checked_sub(usdc_repaid.amount)
@@ -227,8 +252,8 @@ mod tests {
     use cosmwasm_std::{coins, Addr, OwnedDeps};
     use crate::msg::InstantiateMsg;
 
-    const ADDR1: &str = "addr1";
-    const ADDR2: &str = "addr2";
+    const ADDR1: &str = "archway1t00mqwm46hmvkgj4ysyh0ykyjln3yw2fvt92wj";
+    const ADDR2: &str = "archway1ehuphj3j9ml5stwan46syfv8rj9uw49mm7a5vy";
 
     fn setup() -> OwnedDeps<MockStorage, MockApi, MockQuerier> {
         let mut deps = mock_dependencies();
@@ -268,8 +293,11 @@ mod tests {
         match err {
             ContractError::AccountExists {} => {}
             e => panic!("unexpected error: {:?}", e),
+
         }
     }
+
+//address = archway13hum800gyk7348f2euk488lxa4w7vpe4hwx34ldp5urq6cfvfavs5up0as
 
     #[test]
     fn test_borrow() {

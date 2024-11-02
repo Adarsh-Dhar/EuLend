@@ -3,8 +3,7 @@ import { useStore } from "../states/state";
 
 const contractAddress = 'archway1z5krv4lgwh883fv840gupe4mtwjfnmfw0d86l9yrrlj7s4rj9hdsp8c87s';
 
-const offlineSigner = useStore((state) => state.offlineSigner);
-const userAddress = useStore((state) => state.address);
+
 
 interface KeplrWindow {
   keplr?: {
@@ -22,7 +21,12 @@ declare global {
 
 
 export const createAccount = async () => {
+  const offlineSigner = useStore.getState().offlineSigner;
+  const userAddress = useStore.getState().address;
+  console.log("offlineSigner", offlineSigner);
+  console.log("userAddress", userAddress);
   try {
+    
     if (!offlineSigner || !userAddress) {
       throw new Error("Please connect wallet first");
     }
@@ -56,7 +60,10 @@ export const borrow = async (
   collateralDenom: string,
   collateralAmount: number,
 ) => {
+  const offlineSigner = useStore.getState().offlineSigner;
+  const userAddress = useStore.getState().address;
   try {
+    
     if (!offlineSigner || !userAddress) {
       throw new Error("Please connect wallet first");
     }
@@ -97,7 +104,10 @@ export const repay = async (
   withdrawAmount: string,
   
 ) => {
+  const offlineSigner = useStore.getState().offlineSigner;
+  const userAddress = useStore.getState().address;
   try {
+   
     if (!offlineSigner || !userAddress) {
       throw new Error("Please connect wallet first");
     }

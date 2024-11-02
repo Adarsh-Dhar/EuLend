@@ -19,6 +19,9 @@ pub enum ContractError {
     #[error("Account already exists")]
     AccountExists{},
 
+    #[error("Account does not exist")]
+    AccountDoesNotExist {},
+
     #[error("Insufficient collateral")]
     InsufficientCollateral {},
 
