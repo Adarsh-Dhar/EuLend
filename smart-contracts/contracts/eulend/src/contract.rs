@@ -8,7 +8,7 @@ use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{Account, ACCOUNTS, COLLATERAL};
+use crate::state::{Account, ACCOUNTS, COLLATERAL, ESCROW, LIQUIDITY_PROVIDERS, LiquidityProvider};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:backend";
@@ -44,6 +44,9 @@ pub fn execute(
         },
         ExecuteMsg::DeleteAccount {} => {
             execute::delete_account(deps, info)
+        },
+        ExecuteMsg::ProvideLiquidity {liquidity_amount} => {
+            execute::provide_liquidity(deps, env, info, liquidity_amount)
         }
     }
 }
@@ -84,6 +87,8 @@ pub mod execute {
         Ok(Response::new().add_attribute("method", "delete_account"))
     }
 
+    //address = archway1h28ghlz7vm8e5j8mge3r9hkym9d6ldx9s9k094llgmer7h6snvjqujqxke
+
     pub fn borrow(
         deps: DepsMut,
         env: Env,
@@ -107,9 +112,20 @@ pub mod execute {
             return Err(ContractError::AccountDoesNotExist {});
         }
 
+        // Save collateral
         COLLATERAL.save(deps.storage, &collateral_denom, &collateral_amount)?;
             
+        // Get current escrow balance
+        let mut escrow = ESCROW ;
         
+        // Verify sufficient funds in escrow
+        if escrow < borrow_amount {
+            return Err(ContractError::InsufficientFunds {});
+        }
+        
+        // Update escrow balance
+        escrow = escrow.checked_sub(borrow_amount)
+            .map_err(|_| ContractError::MathError {})?;
         
         
         // Update borrowed amount
@@ -118,7 +134,7 @@ pub mod execute {
         // Save updated account
         ACCOUNTS.save(deps.storage, &info.sender.to_string(), &account)?;
         
-        // Send USDC to borrower
+        // Send USDC to borrower from escrow
         let send_msg = BankMsg::Send {
             to_address: info.sender.to_string(),
             amount: vec![Coin {
@@ -207,6 +223,45 @@ pub mod execute {
             .add_attribute("collateral_withdrawn", withdraw_denom)
             .add_attribute("withdrawal_amount", withdraw_amount))
     }
+
+    pub fn provide_liquidity(
+        deps: DepsMut,
+        env: Env,
+        info: MessageInfo,
+        liquidity_amount: Uint128,
+    ) -> Result<Response, ContractError> {
+        // Check if funds were actually sent
+        if info.funds.is_empty() || info.funds[0].amount != liquidity_amount {
+            return Err(ContractError::InsufficientFunds {});
+        }
+
+        // Create or update liquidity provider record
+        let liquidity_provider = LiquidityProvider {
+            address: info.sender.to_string(),
+            liquidity_amount,
+        };
+        LIQUIDITY_PROVIDERS.save(deps.storage, &info.sender, &liquidity_provider)?;
+
+        // Transfer funds to contract escrow
+        // let transfer_msg = BankMsg::Send {
+        //     to_address: env.contract.address.to_string(),
+        //     amount: vec![info.funds[0].clone()],
+        // };
+
+        let transfer_msg = BankMsg::Send {
+            to_address: env.contract.address.to_string(),
+            amount: vec![Coin {
+                denom: "usdc".to_string(),
+                amount: liquidity_amount,
+            }],
+        };
+
+        Ok(Response::new()
+            .add_message(transfer_msg)
+            .add_attribute("method", "provide_liquidity")
+            .add_attribute("provider", info.sender)
+            .add_attribute("amount", liquidity_amount))
+    }
 }
 
 // Helper function to get collateral value (simplified)
@@ -222,9 +277,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::GetAccount { address } => {
             to_json_binary(&query::get_account(deps, address)?)
         },
-        QueryMsg::MaxWithdrawableAmount { token_denom } => {
-            to_json_binary(&query::max_withdrawable_amount(deps, token_denom)?)
-        }
+        
     }
 }
 
@@ -232,14 +285,11 @@ pub mod query {
     use super::*;
 
     pub fn get_account(deps: Deps, address: String) -> StdResult<Account> {
-        ACCOUNTS.load(deps.storage, &address)
+        let account = ACCOUNTS.load(deps.storage, &address)?;
+        Ok(account)
     }
 
-    pub fn max_withdrawable_amount(deps: Deps, token_denom: String) -> StdResult<Uint128> {
-        let collateral = COLLATERAL.may_load(deps.storage, &token_denom)?
-            .unwrap_or(Uint128::zero());
-        Ok(collateral)
-    }
+    
 }
 
 #[cfg(test)]
@@ -297,7 +347,7 @@ mod tests {
         }
     }
 
-//address = archway13hum800gyk7348f2euk488lxa4w7vpe4hwx34ldp5urq6cfvfavs5up0as
+
 
     #[test]
     fn test_borrow() {
