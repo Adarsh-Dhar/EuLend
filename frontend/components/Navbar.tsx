@@ -20,6 +20,9 @@ const Navbar: React.FC = () => {
           <Link href="/Repay" className="my-2 text-gray-300 hover:text-white transition">
             Repay
           </Link>
+          <Link href="/ProvideLiquidity" className="my-2 text-gray-300 hover:text-white transition">
+            Liquidity
+          </Link>
           <ConnectWallet />
         </div>
       </div>
