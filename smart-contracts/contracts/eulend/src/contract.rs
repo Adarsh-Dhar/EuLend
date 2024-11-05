@@ -8,7 +8,7 @@ use cw2::set_contract_version;
 use cw_storage_plus::{Item, Map};
 use crate::error::ContractError;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
-use crate::state::{Account, ACCOUNTS, COLLATERAL, ESCROW, LIQUIDITY_PROVIDERS, LiquidityProvider, Collateral};
+use crate::state::{Account, ACCOUNTS, COLLATERAL, ESCROW, LIQUIDITY_PROVIDERS, LiquidityProvider, Collateral, Pool, POOLS, PoolUtilization};
 
 // version info for migration info
 const CONTRACT_NAME: &str = "crates.io:backend";
@@ -47,6 +47,9 @@ pub fn execute(
         },
         ExecuteMsg::ProvideLiquidity {} => {
             execute::provide_liquidity(deps, env, info)
+        }
+        ExecuteMsg::ChangePoolUtilization { id } => {
+            execute::change_pool_utilization(deps, id)
         }
     }
 }
@@ -242,7 +245,33 @@ pub mod execute {
             .add_attribute("provider", info.sender)
             .add_attribute("amount", liquidity_paid.amount))
     }
+
+    pub fn change_pool_utilization(deps: DepsMut, id: Uint128) -> Result<Response, ContractError> {
+        let mut pool = POOLS.load(deps.storage, &id.to_string())?;
+        let total_liquidity = pool.total_liquidity;
+        let total_borrowed = pool.total_borrowed;
+    
+        let utilization_ratio = total_borrowed / total_liquidity;
+    
+        if utilization_ratio > Uint128::from(90u128) {
+            pool.utilization = PoolUtilization::High;
+        } else if utilization_ratio > Uint128::from(50u128) {
+            pool.utilization = PoolUtilization::Medium;
+        } else {
+            pool.utilization = PoolUtilization::Low;
+        }
+    
+        POOLS.save(deps.storage, &id.to_string(), &pool)?;
+
+        Ok(Response::new()
+            .add_attribute("method", "change_pool_utilization")
+            .add_attribute("pool_id", id.to_string())
+            .add_attribute("pool", pool.utilization.to_string()))
+    
+    }
 }
+
+
 
 // Helper function to get collateral value (simplified)
 fn get_collateral_value(deps: Deps, collateral: &Coin) -> Result<Uint128, ContractError> {

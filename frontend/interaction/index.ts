@@ -196,7 +196,7 @@ export const provideLiquidity = async (amount: number) => {
         "https://rpc.constantine.archway.io",
         offlineSigner
       );
-      const balance = await cwClient.getBalance("axelar1t00mqwm46hmvkgj4ysyh0ykyjln3yw2faw0x0y", "ausdc");
+      const balance = await cwClient.getBalance(userAddress, "ausdc");
       console.log("Balance:", balance);
   
       const accounts = await offlineSigner.getAccounts();
@@ -212,7 +212,7 @@ export const provideLiquidity = async (amount: number) => {
             amount: amount.toString()
           },
           sender: accounts[0].address,
-          receiver: contractAddress, // Changed from userAddress to contractAddress
+          receiver: contractAddress, 
           timeoutTimestamp: Long.fromNumber(Date.now() + 600_000).multiply(1_000_000),
         },
       };

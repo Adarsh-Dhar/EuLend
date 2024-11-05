@@ -12,6 +12,7 @@ pub enum ExecuteMsg {
     Repay {withdraw_denom: String, withdraw_amount: Uint128},
     DeleteAccount {},
     ProvideLiquidity {},
+    ChangePoolUtilization {id : Uint128}
 }
 
 #[cw_serde]
