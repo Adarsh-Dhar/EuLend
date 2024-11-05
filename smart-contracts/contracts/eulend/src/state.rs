@@ -23,6 +23,23 @@ pub struct Collateral {
     pub amount: Uint128,
 }
 
+pub enum PoolUtilization {
+    High,
+    Medium,
+    Low,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
+pub struct Pool {
+    pub id : String,
+    pub lend_token: String,
+    pub borrow_token: String,
+    pub utilization: PoolUtilization,
+    pub total_liquidity: Uint128,
+    pub total_borrowed: Uint128,
+}
+
+
 
 // Collaterals by token denomination
 pub const COLLATERAL: Item<Collateral> = Item::new("collateral");

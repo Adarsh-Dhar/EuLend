@@ -1,5 +1,6 @@
 import { SigningArchwayClient } from "@archwayhq/arch3.js";
 import { useStore } from "../states/state";
+import Long from "long";
 
 const contractAddress = 'archway1auuygyvu7nmhy99g96lvavgj88335fe6cwgrf5dmgnj3jyj302kqcyzhnh';
 
@@ -178,47 +179,60 @@ export const repay = async (
   }
 }
 
+
 export const provideLiquidity = async (amount: number) => {
   const offlineSigner = useStore.getState().offlineSigner;
-  const userAddress = "noble1t00mqwm46hmvkgj4ysyh0ykyjln3yw2f3rvxut";
+  const userAddress = useStore.getState().address;
   console.log("offlineSigner", offlineSigner);
   console.log("userAddress", userAddress);
-  try {
-    
-    if (!offlineSigner || !userAddress) {
-      throw new Error("Please connect wallet first");
-    }
 
-    const cwClient = await SigningArchwayClient.connectWithSigner(
-      "https://rpc.constantine.archway.io",
-      offlineSigner
-    );
-
-    console.log("userAddress", userAddress);
-    console.log("cwClient", cwClient);
-    const accounts = await offlineSigner.getAccounts();
-    const funds = [
-      {
-        denom: "uusdc",
-        amount: amount.toString() // amount should be string
+  
+    try {
+      if (!offlineSigner || !userAddress) {
+        throw new Error("Please connect wallet first");
       }
-    ];
-      
-    
-
-    const msg = { provide_liquidity: {} };
-    const response = await cwClient.execute(
+  
+      const cwClient = await SigningArchwayClient.connectWithSigner(
+        "https://rpc.constantine.archway.io",
+        offlineSigner
+      );
+      const balance = await cwClient.getBalance("axelar1t00mqwm46hmvkgj4ysyh0ykyjln3yw2faw0x0y", "ausdc");
+      console.log("Balance:", balance);
+  
+      const accounts = await offlineSigner.getAccounts();
+  
+      // Create IBC transfer message
+      const msgIBCTransfer = {
+        typeUrl: "/ibc.applications.transfer.v1.MsgTransfer",
+        value: {
+          sourcePort: 'transfer',
+          sourceChannel: 'channel-91', // Archway -> Axelar channel
+          token: {
+            denom: 'ausdc',
+            amount: amount.toString()
+          },
+          sender: accounts[0].address,
+          receiver: contractAddress, // Changed from userAddress to contractAddress
+          timeoutTimestamp: Long.fromNumber(Date.now() + 600_000).multiply(1_000_000),
+        },
+      };
+  
+      // Execute IBC transfer
+      const ibcResponse = await cwClient.signAndBroadcast(
         accounts[0].address,
-        contractAddress,
-        msg,
-        "auto",
-        "provide liquidity",
-        funds
-    );
-    console.log('Delete Account Response:', response);
-    return response;
-  } catch (error) {
-    console.error('Error deleting account:', error);
-    throw error;
+        [msgIBCTransfer],
+        'auto',
+        'IBC Transfer'
+      );
+  
+      if (ibcResponse.code !== undefined && ibcResponse.code !== 0) {
+        throw new Error(`IBC Transfer failed: ${ibcResponse}`);
+      }
+      
+      console.log('IBC Transfer Response:', ibcResponse);
+      return ibcResponse;
+    } catch (error) {
+      console.error('Error providing liquidity:', error);
+      throw error;
+    }
   }
-}
