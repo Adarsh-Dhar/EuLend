@@ -1,9 +1,15 @@
 import { SigningArchwayClient } from "@archwayhq/arch3.js";
 import { useStore } from "../states/state";
 import Long from "long";
+import {ibc,chains} from "chain-registry"
+import { Height } from "cosmjs-types/ibc/core/client/v1/client";
+import { useState } from "react";
 
 const contractAddress = 'archway1auuygyvu7nmhy99g96lvavgj88335fe6cwgrf5dmgnj3jyj302kqcyzhnh';
 
+const channels = ibc.filter(
+  (channel) => channel.chain_1.chain_name === "archwaytestnet"
+)
 
 
 interface KeplrWindow {
@@ -186,7 +192,6 @@ export const provideLiquidity = async (amount: number) => {
   console.log("offlineSigner", offlineSigner);
   console.log("userAddress", userAddress);
 
-  
     try {
       if (!offlineSigner || !userAddress) {
         throw new Error("Please connect wallet first");
@@ -200,22 +205,41 @@ export const provideLiquidity = async (amount: number) => {
       console.log("Balance:", balance);
   
       const accounts = await offlineSigner.getAccounts();
-  
+
+      console.log("accounts", accounts);
+      let coin = {
+        denom : "ausdc",
+        amount : amount
+      }
       // Create IBC transfer message
+      // const msgIBCTransfer = {
+      //   userAddress, // sender address
+      //   contractAddress, // recipient address
+      //   coin, // transfer amount
+      //   "transfer", // source port
+      //   "channel-50", // source channel
+      //   undefined, // timeout height
+      //   undefined, // timeout timestamp 
+      //   "auto", // fee
+      //   "Coreum IBC Transfer" // memo
+      // };
+
       const msgIBCTransfer = {
         typeUrl: "/ibc.applications.transfer.v1.MsgTransfer",
         value: {
-          sourcePort: 'transfer',
-          sourceChannel: 'channel-91', // Archway -> Axelar channel
+          sender: userAddress,
+          receiver: contractAddress,
           token: {
-            denom: 'ausdc',
-            amount: amount.toString()
+            denom: "uausdc",
+            amount: amount
           },
-          sender: accounts[0].address,
-          receiver: contractAddress, 
+          sourcePort: "transfer",
+          sourceChannel: "channel-449",
           timeoutTimestamp: Long.fromNumber(Date.now() + 600_000).multiply(1_000_000),
-        },
-      };
+        }
+      }
+
+      console.log("msgIBCTransfer", msgIBCTransfer);
   
       // Execute IBC transfer
       const ibcResponse = await cwClient.signAndBroadcast(
@@ -225,7 +249,7 @@ export const provideLiquidity = async (amount: number) => {
         'IBC Transfer'
       );
   
-      if (ibcResponse.code !== undefined && ibcResponse.code !== 0) {
+      if (ibcResponse !== undefined && ibcResponse.code !== 0) {
         throw new Error(`IBC Transfer failed: ${ibcResponse}`);
       }
       
@@ -236,3 +260,4 @@ export const provideLiquidity = async (amount: number) => {
       throw error;
     }
   }
+

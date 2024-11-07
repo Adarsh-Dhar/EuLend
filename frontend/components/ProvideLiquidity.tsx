@@ -9,7 +9,8 @@ const ProvideLiquidity = () => {
   const handleProvideLiquidity = async () => {
     try {
       setIsProcessing(true);
-      await provideLiquidity(amount);
+      await provideLiquidity( amount);
+
     } catch (error) {
       console.error("Failed to provide liquidity:", error);
     } finally {
