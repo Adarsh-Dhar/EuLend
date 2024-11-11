@@ -4,6 +4,7 @@ import Long from "long";
 import {ibc,chains} from "chain-registry"
 import { Height } from "cosmjs-types/ibc/core/client/v1/client";
 import { useState } from "react";
+import { Coin } from "@archwayhq/arch3.js";
 
 const contractAddress = 'archway1auuygyvu7nmhy99g96lvavgj88335fe6cwgrf5dmgnj3jyj302kqcyzhnh';
 
@@ -207,34 +208,21 @@ export const provideLiquidity = async (amount: number) => {
       const accounts = await offlineSigner.getAccounts();
 
       console.log("accounts", accounts);
-      let coin = {
-        denom : "ausdc",
-        amount : amount
-      }
-      // Create IBC transfer message
-      // const msgIBCTransfer = {
-      //   userAddress, // sender address
-      //   contractAddress, // recipient address
-      //   coin, // transfer amount
-      //   "transfer", // source port
-      //   "channel-50", // source channel
-      //   undefined, // timeout height
-      //   undefined, // timeout timestamp 
-      //   "auto", // fee
-      //   "Coreum IBC Transfer" // memo
-      // };
+
+      const coin : Coin = {
+        denom: "ibc/88A17FBD38C49E984596ED9FA650B1683E08D89F3D276334F69E4F83989F9492'",
+        amount: amount.toString()
+      };
+      
 
       const msgIBCTransfer = {
         typeUrl: "/ibc.applications.transfer.v1.MsgTransfer",
         value: {
           sender: userAddress,
           receiver: contractAddress,
-          token: {
-            denom: "uausdc",
-            amount: amount
-          },
+          token: coin,
           sourcePort: "transfer",
-          sourceChannel: "channel-449",
+          sourceChannel: "channel-91",
           timeoutTimestamp: Long.fromNumber(Date.now() + 600_000).multiply(1_000_000),
         }
       }
@@ -260,4 +248,31 @@ export const provideLiquidity = async (amount: number) => {
       throw error;
     }
   }
+
+
+  export const ibcTrial = async () => {
+    const channels = ibc.filter(
+      (channel) => channel.chain_1.chain_name === "archwaytestnet"
+    );
+  
+  
+  
+    const IBCEnableChains = channels.map((channel) => {
+      const chain = chains.find(
+        (chain) => chain.chain_name === channel.chain_2.chain_name
+      );
+  
+      return {
+        imgSrc: chain?.logo_URIs?.png,
+        name: chain?.pretty_name,
+        chainId: chain?.chain_id,
+        base: chain?.bech32_prefix,
+        channel: channel.channels[0].chain_1.channel_id,
+        channel2: channel.channels[0].chain_2.channel_id
+      };
+  })
+
+  console.log("IBCEnableChains", IBCEnableChains);
+}
+
 

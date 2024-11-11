@@ -1,6 +1,6 @@
 "use client"
 import React, { useState } from 'react';
-import { provideLiquidity } from '../interaction';
+import { ibcTrial, provideLiquidity } from '../interaction';
 
 const ProvideLiquidity = () => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -9,6 +9,7 @@ const ProvideLiquidity = () => {
   const handleProvideLiquidity = async () => {
     try {
       setIsProcessing(true);
+      await ibcTrial();
       await provideLiquidity( amount);
 
     } catch (error) {
